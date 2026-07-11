@@ -69,7 +69,7 @@ function sandboxLookup(gameSlug: string, playerId: string, playerZoneId?: string
   }
 
   // ── Mobile Legends ─────────────────────────────────────────────────────────
-  if (gameSlug === 'mobile-legends') {
+  if (gameSlug === 'mobile-legends' || gameSlug === 'mobile-legends-khmer') {
     const trimmedZone = playerZoneId ? playerZoneId.trim() : '';
     if (!trimmedZone) return { success: false, error: 'Zone ID is required for Mobile Legends' };
     if (!/^\d{3,10}$/.test(trimmedId)) {
@@ -286,6 +286,75 @@ async function robloxLiveLookup(username: string): Promise<LookupResult | null> 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MRXTOPUP LIVE LOOKUP: Uses the check-user API endpoint (POST)
+// ─────────────────────────────────────────────────────────────────────────────
+async function mrxApiLookup(
+  gameSlug: string,
+  playerId: string,
+  playerZoneId?: string
+): Promise<LookupResult | null> {
+  try {
+    const payload: any = { userId: playerId.trim() };
+    if ((gameSlug === 'mobile-legends' || gameSlug.startsWith('mobile-legends-')) && playerZoneId) {
+      payload.zoneId = playerZoneId.trim();
+    }
+
+    const url = 'https://www.mrxtopup.com/api/check-user';
+    console.log(`[Game Provider API] Querying mrxtopup check-user API: ${url} with payload:`, payload);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, fill: true) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Referer': (gameSlug === 'mobile-legends' || gameSlug.startsWith('mobile-legends-')) ? 'https://www.mrxtopup.com/topup/mlbb' : 'https://www.mrxtopup.com/topup/ff',
+        'Origin': 'https://www.mrxtopup.com',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.warn(`[Game Provider API] mrxtopup check-user API returned HTTP ${response.status}. Using fallback.`);
+      return null;
+    }
+
+    const data = (await response.json()) as any;
+    console.log('[Game Provider API] mrxtopup check-user response:', data);
+
+    if (data && data.success === true) {
+      const nickname = data.name || data.nickname || '';
+      if (nickname) {
+        return { success: true, nickname };
+      }
+    }
+
+    if (data && data.success === false) {
+      if (process.env.SANDBOX_MODE === 'true') {
+        console.warn(`[Game Provider API] Sandbox active. Bypassing check-user error: "${data.message || data.error}"`);
+        return null;
+      }
+      return { success: false, error: data.message || 'Player ID invalid or not found.' };
+    }
+
+    return null;
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      console.warn('[Game Provider API] mrxtopup check-user API request timed out after 8s.');
+    } else {
+      console.warn('[Game Provider API] Failed to reach mrxtopup check-user API:', e.message);
+    }
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT: lookupPlayerNickname
 // Strategy: Live API → Sandbox Fallback (always works even if region-blocked)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -300,7 +369,41 @@ export async function lookupPlayerNickname(
     return { success: false, error: 'Player ID is required' };
   }
 
-  // ── 1. Roblox: use official Roblox API ──────────────────────────────────
+  const baseSlug = gameSlug.startsWith('free-fire-') 
+    ? 'free-fire' 
+    : (gameSlug.startsWith('mobile-legends-') ? 'mobile-legends' : gameSlug);
+
+  // Pre-check: If this ID is a pre-seeded mock sandbox account, resolve it immediately.
+  if (baseSlug === 'mobile-legends') {
+    const key = `${trimmedId}|${playerZoneId ? playerZoneId.trim() : ''}`;
+    const known = SANDBOX_ACCOUNTS['mobile-legends'][key];
+    if (known) return { success: true, nickname: known };
+  } else if (SANDBOX_ACCOUNTS[baseSlug]?.[trimmedId]) {
+    return { success: true, nickname: SANDBOX_ACCOUNTS[baseSlug][trimmedId] };
+  }
+
+  // ── 1. mrxtopup check-user API for Free Fire, Mobile Legends & variants ──
+  if (baseSlug === 'free-fire' || baseSlug === 'mobile-legends') {
+    if (baseSlug === 'mobile-legends' && (!playerZoneId || !playerZoneId.trim())) {
+      return { success: false, error: 'Zone ID is required for Mobile Legends' };
+    }
+
+    const liveResult = await mrxApiLookup(gameSlug, trimmedId, playerZoneId);
+
+    if (liveResult !== null) {
+      // Live API gave a definitive answer (could be success or explicit invalid ID error)
+      if (!liveResult.success) {
+        return liveResult; // Propagate the "player not found" error directly
+      }
+      return liveResult; // Valid player found live
+    }
+
+    // Fallback to sandbox in case API is down or throttled
+    console.log(`[Game Provider API] mrxtopup API unavailable for ${gameSlug}. Using sandbox resolver.`);
+    return sandboxLookup(gameSlug, trimmedId, playerZoneId);
+  }
+
+  // ── 2. Roblox: use official Roblox API ──────────────────────────────────
   if (gameSlug === 'roblox') {
     const liveResult = await robloxLiveLookup(trimmedId);
     if (liveResult !== null) {
@@ -311,42 +414,33 @@ export async function lookupPlayerNickname(
     return sandboxLookup(gameSlug, trimmedId, playerZoneId);
   }
 
-  // ── 2. Steam Voucher: no validation needed ──────────────────────────────
+  // ── 3. Steam Voucher: no validation needed ──────────────────────────────
   if (gameSlug === 'steam-voucher') {
     return { success: true, nickname: 'Steam Wallet Recipient' };
   }
 
-  // ── 3. Games supported by the vercel validation API ─────────────────────
+  // ── 4. Games supported by the vercel validation API ─────────────────────
   const LIVE_API_SLUGS: Record<string, string> = {
-    'free-fire': 'free_fire',
-    'mobile-legends': 'mobile_legends',
     'pubg-mobile': 'pubg_mobile',
   };
 
   const typeName = LIVE_API_SLUGS[gameSlug];
 
   if (typeName) {
-    // Validate Zone ID for MLBB before making any API call
-    if (gameSlug === 'mobile-legends' && (!playerZoneId || !playerZoneId.trim())) {
-      return { success: false, error: 'Zone ID is required for Mobile Legends' };
-    }
-
     const liveResult = await liveApiLookup(typeName, trimmedId, playerZoneId);
 
     if (liveResult !== null) {
-      // Live API gave a definitive answer (could be success or explicit invalid ID error)
       if (!liveResult.success) {
-        return liveResult; // Propagate the "player not found" error directly
+        return liveResult;
       }
-      return liveResult; // Valid player found live
+      return liveResult;
     }
 
-    // Live API was unreachable/region-blocked — use sandbox
     console.log(`[Game Provider API] Live API unavailable for ${gameSlug}. Using sandbox resolver.`);
     return sandboxLookup(gameSlug, trimmedId, playerZoneId);
   }
 
-  // ── 4. All other games: sandbox resolver only ────────────────────────────
+  // ── 5. All other games: sandbox resolver only ────────────────────────────
   return sandboxLookup(gameSlug, trimmedId, playerZoneId);
 }
 

@@ -255,6 +255,91 @@ async function handleSuccessfulPayment(order: any, gatewayRef: string) {
   return { currentOrder, deliverySuccess, deliveredCode, providerRef, errorMessage };
 }
 
+// ── REAL-TIME MD5 CHECK ENDPOINT ──────────────────────────────────────────────
+// Called by the frontend every 3s during active KHQR payment waiting.
+// Directly hits Bakong Relay API check_transaction_by_md5 and auto-delivers
+// if the payment is confirmed.
+router.get('/check-md5/:md5', async (req, res) => {
+  try {
+    const { md5 } = req.params;
+    const sanitizedMd5 = md5?.toLowerCase().trim();
+
+    if (!sanitizedMd5) {
+      return res.status(400).json({ paid: false, error: 'MD5 required' });
+    }
+
+    // Find the order by MD5
+    const order = await prisma.order.findFirst({
+      where: { paymentMd5: sanitizedMd5 },
+      include: { package: { include: { product: true } } },
+    });
+
+    if (!order) {
+      return res.status(404).json({ paid: false, error: 'Order not found for this MD5' });
+    }
+
+    // If already paid/completed, return instantly
+    if (order.paymentStatus === 'PAID' || order.status === 'SUCCESS' || order.status === 'COMPLETED') {
+      return res.status(200).json({
+        paid: true,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        txnId: order.paymentTxnId,
+        alreadyProcessed: true,
+      });
+    }
+
+    // Real-time check against Bakong APIs
+    const isPaid = await checkBakongPaymentStatus(sanitizedMd5);
+    console.log(`[MD5-Check] md5=${sanitizedMd5} → isPaid=${isPaid}`);
+
+    if (!isPaid) {
+      return res.status(200).json({
+        paid: false,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        txnId: order.paymentTxnId,
+        md5: sanitizedMd5,
+      });
+    }
+
+    // Payment confirmed — prevent double-processing with optimistic lock
+    const freshOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: { package: { include: { product: true } } },
+    });
+
+    if (!freshOrder || freshOrder.paymentStatus === 'PAID') {
+      return res.status(200).json({
+        paid: true,
+        status: freshOrder?.status || 'SUCCESS',
+        paymentStatus: 'PAID',
+        txnId: order.paymentTxnId,
+        alreadyProcessed: true,
+      });
+    }
+
+    // Process the payment delivery
+    console.log(`[MD5-Check] ✅ Confirmed paid — triggering delivery for ${order.paymentTxnId}`);
+    const result = await handleSuccessfulPayment(freshOrder, `MD5CHECK-${sanitizedMd5}`);
+
+    return res.status(200).json({
+      paid: true,
+      status: result.currentOrder.status,
+      paymentStatus: result.currentOrder.paymentStatus,
+      deliverySuccess: result.deliverySuccess,
+      deliveredCode: result.deliveredCode,
+      txnId: order.paymentTxnId,
+      message: result.deliverySuccess
+        ? 'Payment confirmed and product delivered!'
+        : 'Payment confirmed but delivery failed. Please contact support.',
+    });
+  } catch (error) {
+    console.error('[MD5-Check] Error:', error);
+    return res.status(500).json({ paid: false, error: 'Internal server error' });
+  }
+});
+
 // 2. Fetch specific order status (Public - used by polling)
 router.get('/status/:txnId', async (req, res) => {
   try {

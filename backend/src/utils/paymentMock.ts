@@ -269,6 +269,33 @@ export async function checkBakongPaymentStatus(
     return false;
   }
 
+  // ── Sandbox Auto-Approve simulation bypass ──────────────────────────────────
+  if (process.env.SANDBOX_MODE === 'true') {
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const prismaClient = new PrismaClient();
+      const order = await prismaClient.order.findFirst({
+        where: {
+          OR: [
+            { paymentMd5: sanitizedMd5 },
+            { paymentTxnId: khpayTxnId }
+          ]
+        }
+      });
+      if (order) {
+        const elapsedMs = Date.now() - new Date(order.createdAt).getTime();
+        if (elapsedMs >= 15000) {
+          console.log(`[Payment Verification] [Sandbox Auto-Approve] Order ${order.paymentTxnId} elapsed ${elapsedMs / 1000}s. Auto-confirming payment.`);
+          await prismaClient.$disconnect();
+          return true;
+        }
+      }
+      await prismaClient.$disconnect();
+    } catch (e: any) {
+      console.error('[Payment Verification] Sandbox auto-approve check error:', e.message);
+    }
+  }
+
   // ── 1. KHPAY API status check ─────────────────────────────────────────────
   const khpayUrl = process.env.KHPAY_API_URL;
   const khpayToken = process.env.KHPAY_API_KEY;

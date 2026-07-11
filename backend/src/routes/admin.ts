@@ -306,6 +306,23 @@ router.post('/products/:productId/packages', async (req: AuthenticatedRequest, r
   }
 });
 
+// 7b. Product management: Update a product's image URL
+router.patch('/products/:id', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { image, name } = req.body;
+    const data: any = {};
+    if (image !== undefined) data.image = image;
+    if (name) data.name = name;
+
+    const updated = await prisma.product.update({ where: { id }, data });
+    return res.status(200).json({ message: 'Product updated', product: updated });
+  } catch (error: any) {
+    console.error('Admin update product error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // 8. Product management: Delete a product
 router.delete('/products/:id', async (req: AuthenticatedRequest, res: Response) => {
   try {

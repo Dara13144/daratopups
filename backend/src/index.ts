@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import multer from 'multer';
 import prisma from './prisma';
 
 // Route Imports
@@ -35,11 +37,14 @@ app.use('/api/', limiter);
 
 // Middleware configuration
 app.use(cors({
-  origin: '*', // Allow connections from frontend Next.js dev server
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Serve uploaded product images statically
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
 
 // Base health route
 app.get('/api/health', (req, res) => {
@@ -56,6 +61,30 @@ app.use('/api/products', productsRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/admin', adminRouter);
 
+// ── Product Image Upload Endpoint ────────────────────────────────────────────
+import { authenticateJWT, requireAdmin } from './middleware/auth';
+const storage = multer.diskStorage({
+  destination: path.join(__dirname, '..', 'public', 'uploads', 'products'),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    cb(null, `${base}-${Date.now()}${ext}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB max
+
+app.post(
+  '/api/admin/upload-image',
+  authenticateJWT,
+  requireAdmin,
+  upload.single('image'),
+  (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const imageUrl = `/uploads/products/${req.file.filename}`;
+    return res.status(200).json({ imageUrl });
+  }
+);
+
 // Express Error Handling Middleware fallback
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled Server Error:', err);
@@ -68,7 +97,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // khpay.site. If paid → auto-delivers product and marks order COMPLETED.
 // This ensures payments are never missed even if the browser tab was closed.
 // ─────────────────────────────────────────────────────────────────────────────
-const SWEEP_INTERVAL_MS = 5_000; // 5 seconds
+const SWEEP_INTERVAL_MS = 3_000; // 3 seconds — real-time MD5 check
 const BAKONG_RELAY_URL   = process.env.BAKONG_RELAY_URL   || 'https://api.bakongrelay.com/v1';
 const BAKONG_RELAY_TOKEN = process.env.BAKONG_RELAY_TOKEN  || process.env.BAKONG_TOKEN || '';
 
