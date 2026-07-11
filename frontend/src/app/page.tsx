@@ -63,37 +63,7 @@ export default function Home() {
           />
         </div>
 
-        {/* Filters and Search controls */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          {/* Category Tabs */}
-          <div className="flex items-center overflow-x-auto pb-2 md:pb-0 space-x-2 scrollbar-none">
-            {categories.map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => setActiveCategory(cat.value)}
-                className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 border ${
-                  activeCategory === cat.value
-                    ? 'bg-gradient-to-r from-cyan-500 to-violet-500 text-white border-transparent shadow-lg shadow-cyan-950/40'
-                    : 'bg-slate-950/50 text-slate-400 border-slate-900 hover:border-slate-800 hover:text-slate-200'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
 
-          {/* Search box input */}
-          <div className="relative max-w-md w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder={t.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-950/50 border border-slate-900 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
-            />
-          </div>
-        </div>
 
         {/* Error notification display */}
         {error && (

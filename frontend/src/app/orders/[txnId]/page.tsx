@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails } from '../../../lib/api';
-import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
@@ -19,10 +19,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
   const [simulating, setSimulating] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(true);
+  const [md5Checking, setMd5Checking] = useState(false);
+  const [md5LastChecked, setMd5LastChecked] = useState<Date | null>(null);
   const { t } = useLanguage();
 
   // Polling ref/timer
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const md5PollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     params.then((p) => setTxnId(p.txnId));
@@ -50,23 +54,66 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     }
   };
 
+  // Real-time MD5 check against Bakong Relay API
+  const checkMd5Payment = async (md5: string) => {
+    if (!md5 || md5Checking) return;
+    setMd5Checking(true);
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${API_BASE}/api/orders/check-md5/${md5}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMd5LastChecked(new Date());
+        if (data.paid) {
+          // MD5 confirmed paid — refresh order status immediately
+          await fetchStatus(false);
+          // Stop MD5 polling if paid
+          if (md5PollRef.current) {
+            clearInterval(md5PollRef.current);
+            md5PollRef.current = null;
+          }
+        }
+      }
+    } catch (e) {
+      // Silently ignore network errors on background check
+    } finally {
+      setMd5Checking(false);
+    }
+  };
+
   useEffect(() => {
     if (!txnId) return;
 
     // First fetch
     fetchStatus(true);
 
-    // Setup polling every 5 seconds
+    // Setup polling every 3 seconds for status
     pollingRef.current = setInterval(() => {
       fetchStatus(false);
-    }, 5000);
+    }, 3000);
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (md5PollRef.current) clearInterval(md5PollRef.current);
     };
   }, [txnId]);
+
+  // Start MD5 real-time polling when order has a paymentMd5 and is still PENDING
+  useEffect(() => {
+    if (!order) return;
+    const isPending = order.status === 'PENDING' && order.paymentStatus !== 'PAID';
+    const md5 = order.paymentMd5;
+
+    if (isPending && md5 && !md5PollRef.current) {
+      // Check MD5 every 3 seconds
+      md5PollRef.current = setInterval(() => {
+        checkMd5Payment(md5);
+      }, 3000);
+    } else if (!isPending && md5PollRef.current) {
+      clearInterval(md5PollRef.current);
+      md5PollRef.current = null;
+    }
+  }, [order?.status, order?.paymentStatus, order?.paymentMd5]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -88,6 +135,106 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     } finally {
       setSimulating(false);
     }
+  };
+
+  const handleDownloadReceipt = () => {
+    if (!order) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 500;
+    canvas.height = 680;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Decorative header line
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(30, 80);
+    ctx.lineTo(470, 80);
+    ctx.stroke();
+
+    // App name / title
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('Payment Success', 40, 50);
+
+    // Green success check circle
+    ctx.fillStyle = '#ecfdf5';
+    ctx.beginPath();
+    ctx.arc(250, 160, 40, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(250, 160, 40, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Checkmark inside circle
+    ctx.beginPath();
+    ctx.moveTo(235, 160);
+    ctx.lineTo(245, 170);
+    ctx.lineTo(270, 145);
+    ctx.stroke();
+
+    // Khmer success text
+    ctx.fillStyle = '#065f46';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ការទិញរបស់អ្នកត្រូវបានជោគជ័យ', 250, 230);
+
+    // Table parameters
+    const startY = 270;
+    const rowHeight = 45;
+    const rows = [
+      { label: 'PRODUCT', value: `${order.gameName} - ${order.packageName}` },
+      { label: 'USER ID', value: order.playerId },
+      { label: 'NICKNAME', value: order.playerNickname || 'N/A' },
+      { label: 'PAYMENT', value: order.paymentMethod || 'KHQR' },
+      { label: 'PRICE', value: `${order.price.toFixed(2)} USD` },
+      { label: 'TRANSACTION ID', value: order.paymentTxnId || '' },
+    ];
+
+    rows.forEach((row, i) => {
+      const y = startY + i * rowHeight;
+      
+      // Bottom border for each row
+      ctx.strokeStyle = '#f1f5f9';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(40, y + 15);
+      ctx.lineTo(460, y + 15);
+      ctx.stroke();
+
+      // Label text
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(row.label, 40, y);
+
+      // Value text
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(row.value, 460, y);
+    });
+
+    // Khmer note at bottom
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('សូមថតវិក្កយបត្រទុកដើម្បីផ្ទៀងផ្ទាត់', 250, 580);
+
+    // Trigger PNG download
+    const url = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Receipt-${order.paymentTxnId}.png`;
+    link.click();
   };
 
   if (loading) {
@@ -193,13 +340,80 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                         Scan with ABA Mobile or any app supporting KHQR to complete payment.
                       </p>
 
-                      {/* Status indicators */}
-                      <div className="px-6 pb-6 text-center">
-                        <div className="inline-flex items-center space-x-2 bg-emerald-50 border border-emerald-100 text-emerald-750 px-4 py-2 rounded-full text-[11px] font-extrabold select-none shadow-sm mx-auto">
+                      {/* Status indicators — Real-time MD5 check */}
+                      <div className="px-6 pb-6 text-center space-y-2">
+                        <div className="inline-flex items-center space-x-2 bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-2 rounded-full text-[11px] font-extrabold select-none shadow-sm mx-auto animate-pulse">
                           <span className="h-3 w-3 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
                           <span>Waiting for payment...</span>
                         </div>
+                        {/* Live MD5 check indicator */}
+                        {order.paymentMd5 && (
+                          <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-400 font-medium select-none">
+                            {md5Checking ? (
+                              <>
+                                <span className="h-2 w-2 border border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
+                                <span className="text-cyan-400 font-semibold">Checking Bakong MD5...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+                                <span>
+                                  MD5 live check active
+                                  {md5LastChecked && (
+                                    <> · Last: {md5LastChecked.toLocaleTimeString()}</>
+                                  )}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
+
+                    </div>
+
+                    {/* I've Paid — Force Verify Button */}
+                    <div className="mt-4 max-w-[300px] w-full space-y-2">
+                      <button
+                        id="btn-ive-paid"
+                        disabled={verifying}
+                        onClick={async () => {
+                          if (!order) return;
+                          setVerifying(true);
+                          setVerifyMsg('');
+                          try {
+                            const result = await verifyPayment(order.paymentTxnId);
+                            if (result.verified) {
+                              setVerifyMsg('✅ Payment confirmed! Delivering your product...');
+                              // Refresh order state immediately
+                              await fetchStatus(false);
+                            } else {
+                              setVerifyMsg(result.message || '❌ Payment not detected yet. Please wait and try again.');
+                            }
+                          } catch {
+                            setVerifyMsg('❌ Verification failed. Please try again.');
+                          } finally {
+                            setVerifying(false);
+                          }
+                        }}
+                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-950 disabled:text-slate-550 text-white font-extrabold text-xs shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all"
+                      >
+                        {verifying ? (
+                          <>
+                            <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-4.5 w-4.5" />
+                            <span>I&apos;ve Paid — Verify Now</span>
+                          </>
+                        )}
+                      </button>
+                      {verifyMsg && (
+                        <p className={`text-xs text-center font-semibold px-2 ${verifyMsg.startsWith('✅') ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {verifyMsg}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -426,6 +640,98 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
           </div>
 
         </div>
+
+        {/* PAYMENT SUCCESS OVERLAY MODAL */}
+        {(order.status === 'COMPLETED' || order.status === 'SUCCESS') && showSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl relative border border-slate-100 flex flex-col p-6 text-slate-800 animate-in fade-in zoom-in duration-200">
+              
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center shrink-0">
+                    {(order.gameSlug || '').includes('free-fire') ? (
+                      <img 
+                        src="https://api.dicebear.com/7.x/adventurer/svg?seed=freefire" 
+                        className="w-full h-full rounded-full object-cover" 
+                        alt="" 
+                      />
+                    ) : (order.gameSlug || '').includes('mobile-legends') ? (
+                      <img 
+                        src="https://api.dicebear.com/7.x/adventurer/svg?seed=mlbb" 
+                        className="w-full h-full rounded-full object-cover" 
+                        alt="" 
+                      />
+                    ) : (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 stroke-[2.5]" />
+                    )}
+                  </div>
+                  <span className="font-extrabold text-sm text-slate-900 tracking-tight font-sans">Payment Success</span>
+                </div>
+                <button 
+                  onClick={() => setShowSuccessModal(false)} 
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-50 rounded-full"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Tick Circle Block */}
+              <div className="bg-[#fcfdfd] border border-slate-100 rounded-2xl p-5 flex flex-col items-center mb-4">
+                <div className="w-16 h-16 rounded-full bg-[#e6f4ea] flex items-center justify-center text-[#137333] mb-3">
+                  <CheckCircle2 className="h-9 w-9 stroke-[2.5]" />
+                </div>
+                <span className="text-[#137333] font-bold text-base sm:text-lg text-center tracking-wide font-sans">
+                  ការទិញរបស់អ្នកត្រូវបានជោគជ័យ
+                </span>
+              </div>
+
+              {/* Details List */}
+              <div className="space-y-0.5 mb-6">
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">Product</span>
+                  <span className="text-slate-800 font-extrabold text-right">
+                    {order.gameName} - {order.packageName}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">USER ID</span>
+                  <span className="text-slate-800 font-mono font-bold select-all">{order.playerId}</span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">NICKNAME</span>
+                  <span className="text-slate-800 font-bold">{order.playerNickname || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">PAYMENT</span>
+                  <span className="text-slate-800 font-extrabold">{order.paymentMethod || 'KHQR'}</span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">PRICE</span>
+                  <span className="text-slate-850 font-black">{order.price.toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100 text-xs">
+                  <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">TRANSACTION ID</span>
+                  <span className="text-slate-800 font-mono font-bold select-all">{order.paymentTxnId}</span>
+                </div>
+              </div>
+
+              {/* Note Label */}
+              <p className="text-[10px] text-slate-400 font-bold text-center select-none mb-4 tracking-wide font-sans">
+                សូមថតវិក្កយបត្រទុកដើម្បីផ្ទៀងផ្ទាត់
+              </p>
+
+              {/* Download Button */}
+              <button
+                onClick={handleDownloadReceipt}
+                className="w-full py-3 rounded-xl bg-[#099268] hover:bg-[#087f5b] text-white font-extrabold text-xs shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-[0.99]"
+              >
+                <Download className="h-4 w-4" />
+                <span>Download Receipt</span>
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       <Footer />

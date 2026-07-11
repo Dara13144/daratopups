@@ -146,17 +146,41 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         setLoading(false);
       });
   }, [slug]);
+  const handleLookup = async () => {
+    if (!playerId) {
+      setLookupError(t.nicknameRequired);
+      return;
+    }
+    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
+    if (isMLBB && !playerZoneId) {
+      setLookupError(t.zoneIdRequired);
+      return;
+    }
 
+    setLookupError('');
+    setLookupSuccess(false);
+    setLookupLoading(true);
 
-
-
+    try {
+      const fetchedNickname = await lookupNickname(slug, playerId, playerZoneId);
+      setNickname(fetchedNickname);
+      setLastValidNickname(fetchedNickname);
+      setLookupSuccess(true);
+    } catch (err: any) {
+      console.error(err);
+      setLookupError(err.message || 'Nickname lookup failed. Please verify Player ID.');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   const handleOrderSubmit = async () => {
     if (!playerId) {
       setError(t.nicknameRequired);
       return;
     }
-    if (slug === 'mobile-legends' && !playerZoneId) {
+    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
+    if (isMLBB && !playerZoneId) {
       setError(t.zoneIdRequired);
       return;
     }
@@ -165,6 +189,11 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       return;
     }
 
+    const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB;
+    if (isValidationNeeded && !lookupSuccess) {
+      setError('Please validate your Player ID/Nickname before placing order');
+      return;
+    }
 
     setError('');
     setOrderSubmitting(true);
@@ -295,7 +324,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                   />
                 </div>
 
-                {product.slug === 'mobile-legends' && (
+                {(product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
                   <div>
                     <label className="block text-slate-400 text-xs font-semibold mb-1.5">
                       {t.zoneId}
@@ -312,7 +341,38 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                     />
                   </div>
                 )}
-              </div>            </div>
+              </div>
+
+              {/* Verify Nickname button & status indicator */}
+              {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
+                <div className="mt-4 pt-4 border-t border-slate-900/60 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleLookup}
+                    disabled={lookupLoading}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all"
+                  >
+                    {lookupLoading ? `${t.verifying}...` : 'ផ្ទៀងផ្ទាត់ឈ្មោះអ្នកលេង'}
+                  </button>
+
+                  {lookupSuccess && nickname && (
+                    <div className="flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-1.5">
+                      <CheckCircle className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                      <div className="flex flex-col text-left">
+                        <span className="text-[8px] text-emerald-500 font-bold uppercase tracking-wider">បានបញ្ជាក់</span>
+                        <strong className="text-white font-black text-xs">{nickname}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {lookupError && !lookupLoading && (
+                    <span className="text-red-400 text-xs font-semibold">
+                      ⚠️ {lookupError}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* STEP 2: Select Package */}
             <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
