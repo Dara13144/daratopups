@@ -2,17 +2,22 @@
 // This prevents the "port 5000" error even if NEXT_PUBLIC_API_URL is missing at build time.
 const PRODUCTION_API = 'https://daratopup-backend-1.onrender.com';
 
-export const serverUrl = (
+// Retrieve the raw backend URL from env, default fallback to production Render URL
+const rawApiUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   PRODUCTION_API
-).replace(/\/$/, ''); // strip trailing slash
+);
 
-export const API_BASE = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`;
+// Clean up input: remove trailing slash, and remove any trailing '/api'
+export const serverUrl = rawApiUrl.replace(/\/$/, '').replace(/\/api$/, '');
 
-// Dev diagnostic only — does not affect production behaviour
+// Centralized API endpoint base
+export const API_BASE = `${serverUrl}/api`;
+
+// Dev diagnostic only — does not affect production behavior
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  console.info(`[DaraTopup] API_BASE resolved to: ${API_BASE}`);
+  console.info(`[DaraTopup] resolved serverUrl: "${serverUrl}" and API_BASE: "${API_BASE}"`);
 }
 
 export interface GameProduct {

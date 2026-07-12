@@ -6,7 +6,7 @@ import {
   fetchAdminStats, fetchAdminOrders, updateAdminOrderStatus,
   fetchAdminStock, addAdminStock, fetchProducts, GameProduct,
   addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage,
-  serverUrl
+  serverUrl, API_BASE
 } from '../../lib/api';
 import {
   ShoppingBag, Database, TrendingUp, CheckCircle, Clock, Plus, RefreshCw,
@@ -14,7 +14,6 @@ import {
   ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign
 } from 'lucide-react';
 
-const API_BASE = serverUrl;
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -88,10 +87,10 @@ export default function AdminDashboard() {
     try {
       const token = localStorage.getItem('token') || '';
       const form = new FormData(); form.append('image', file);
-      const res = await fetch(`${API_BASE}/api/admin/upload-image`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      const res = await fetch(`${API_BASE}/admin/upload-image`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
       if (!res.ok) throw new Error('Upload failed');
       const data = await res.json();
-      return `${API_BASE}${data.imageUrl}`;
+      return `${serverUrl}${data.imageUrl}`;
     } finally { setUploadingImage(false); }
   };
 
@@ -148,7 +147,7 @@ export default function AdminDashboard() {
     try {
       const imageUrl = await uploadImageToServer(editImageFile);
       const token = localStorage.getItem('token') || '';
-      const res = await fetch(`${API_BASE}/api/admin/products/${productId}`, {
+      const res = await fetch(`${API_BASE}/admin/products/${productId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ image: imageUrl }),
       });
