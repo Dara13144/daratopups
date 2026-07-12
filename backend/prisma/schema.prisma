@@ -1,4 +1,4 @@
-// Prisma schema — supports both SQLite (local dev) and PostgreSQL (production on Render)
+// Prisma schema — configured for Supabase PostgreSQL
 // Set DATABASE_URL in .env:
 //   Local:      DATABASE_URL="file:./dev.db"
 //   Production: DATABASE_URL="postgresql://user:pass@host/db?pgbouncer=true"
