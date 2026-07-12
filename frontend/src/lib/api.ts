@@ -1,5 +1,12 @@
-const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const API_BASE = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`;
+export const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const API_BASE = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`;
+
+if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && serverUrl.includes('localhost')) {
+  console.warn(
+    `[DaraTopup Warning] Frontend is running at ${window.location.origin}, but the API server is configured to "${serverUrl}". ` +
+    `This indicates that NEXT_PUBLIC_API_URL was NOT injected at build-time. Please redeploy on Render with "Clear Cache & Deploy".`
+  );
+}
 
 
 export interface GameProduct {

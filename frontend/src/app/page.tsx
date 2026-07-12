@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import GameIcon from '../components/GameIcon';
-import { fetchProducts, GameProduct } from '../lib/api';
+import { fetchProducts, GameProduct, API_BASE } from '../lib/api';
 import { Search, AlertCircle, Gamepad2, ArrowRight } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
@@ -25,8 +25,8 @@ export default function Home() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
-        setError('Could not connect to the top-up server API. Please ensure the backend server is running on port 5000.');
+        console.error('Fetch products error:', err);
+        setError(`Could not connect to the top-up server API at "${API_BASE}". Details: ${err.message || err}`);
         setLoading(false);
       });
   }, []);

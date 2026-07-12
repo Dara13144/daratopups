@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
-import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails } from '../../../lib/api';
+import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails, API_BASE } from '../../../lib/api';
 import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
@@ -46,8 +46,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
         }
       }
     } catch (err: any) {
-      console.error(err);
-      setError('Failed to retrieve checkout order details.');
+      console.error('Fetch status error:', err);
+      setError(`Failed to retrieve checkout order details from "${API_BASE}". Details: ${err.message || err}`);
     } finally {
       if (showLoading) setLoading(false);
     }

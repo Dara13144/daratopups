@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import {
   fetchAdminStats, fetchAdminOrders, updateAdminOrderStatus,
   fetchAdminStock, addAdminStock, fetchProducts, GameProduct,
-  addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage
+  addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage,
+  serverUrl
 } from '../../lib/api';
 import {
   ShoppingBag, Database, TrendingUp, CheckCircle, Clock, Plus, RefreshCw,
@@ -13,7 +14,7 @@ import {
   ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign
 } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE = serverUrl;
 
 export default function AdminDashboard() {
   const router = useRouter();

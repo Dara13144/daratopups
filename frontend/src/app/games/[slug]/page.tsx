@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GameIcon from '../../../components/GameIcon';
-import { fetchProduct, lookupNickname, createOrder, GameProduct, GamePackage } from '../../../lib/api';
+import { fetchProduct, lookupNickname, createOrder, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
 import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
@@ -113,10 +113,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     if (showPaymentModal && activeOrder) {
       intervalId = setInterval(async () => {
         try {
-          const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').endsWith('/api')
-            ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000')
-            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api`;
-          const res = await fetch(`${apiBaseUrl}/orders/status/${activeOrder.paymentTxnId}`);
+          const res = await fetch(`${API_BASE}/orders/status/${activeOrder.paymentTxnId}`);
           if (res.ok) {
             const data = await res.json();
             if (data.status === 'SUCCESS' || data.status === 'COMPLETED') {
@@ -144,8 +141,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
-        setError('Failed to fetch game top-up configurations.');
+        console.error('Fetch product detail error:', err);
+        setError(`Failed to fetch game top-up configurations from "${API_BASE}". Details: ${err.message || err}`);
         setLoading(false);
       });
   }, [slug]);
