@@ -1,10 +1,34 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
+  // Allow images from external domains used in the app
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'flagcdn.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.dicebear.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'daratopup-backend-1.onrender.com',
+      },
+    ],
+    unoptimized: true,
+  },
+
+  // Safety net: bake the production API URL in at build time even if env var is missing
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://daratopup-backend-1.onrender.com',
+  },
+
+  // Fix turbopack root warning — point to the frontend directory
   turbopack: {
-    root: path.join(__dirname),
-  }
+    root: __dirname,
+  },
 };
 
 export default nextConfig;
