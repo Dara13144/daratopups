@@ -422,6 +422,8 @@ export async function lookupPlayerNickname(
   // ── 4. Games supported by the vercel validation API ─────────────────────
   const LIVE_API_SLUGS: Record<string, string> = {
     'pubg-mobile': 'pubg_mobile',
+    'honor-of-kings': 'honor_of_kings',
+    'farlight-84': 'farlight',
   };
 
   const typeName = LIVE_API_SLUGS[gameSlug];

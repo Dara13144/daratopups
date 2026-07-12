@@ -12,7 +12,9 @@ import authRouter from './routes/auth';
 import productsRouter from './routes/products';
 import ordersRouter from './routes/orders';
 import adminRouter from './routes/admin';
-import { checkBakongPaymentStatus } from './utils/paymentMock';
+import paymentsRouter from './routes/payments';
+import webhookRouter from './routes/webhook';
+import { verifyAbaKhqrPayment, processVerifiedPayment, expireOldOrders } from './utils/paymentVerification';
 
 // Load environmental variables
 dotenv.config();
@@ -60,6 +62,11 @@ app.use('/api/auth', authRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/payments', paymentsRouter);
+app.use('/api/payment', paymentsRouter);
+app.use('/api/webhook', webhookRouter);
+app.use('/api/payments/webhook', webhookRouter);
+app.use('/api/payment/webhook', webhookRouter);
 
 // ── Product Image Upload Endpoint ────────────────────────────────────────────
 import { authenticateJWT, requireAdmin } from './middleware/auth';
@@ -92,32 +99,25 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BACKGROUND PAYMENT SWEEPER
-// Checks every 10 seconds for any UNPAID BAKONG orders and verifies via
-// khpay.site. If paid → auto-delivers product and marks order COMPLETED.
-// This ensures payments are never missed even if the browser tab was closed.
+// BACKGROUND PAYMENT SWEEPER (Real-Time Safety Sweeper)
+// Runs every 3 minutes. Sweeps PENDING orders, checks status against gateways,
+// processes delivery for paid orders, and automatically expires old ones.
 // ─────────────────────────────────────────────────────────────────────────────
-const SWEEP_INTERVAL_MS = 3_000; // 3 seconds — real-time MD5 check
-const BAKONG_RELAY_URL   = process.env.BAKONG_RELAY_URL   || 'https://api.bakongrelay.com/v1';
-const BAKONG_RELAY_TOKEN = process.env.BAKONG_RELAY_TOKEN  || process.env.BAKONG_TOKEN || '';
+const SWEEP_INTERVAL_MS = 15_000; // 15 seconds — real-time payment sweeper
 
-// Track in-progress sweeps to prevent overlapping runs
 let sweepRunning = false;
-
-async function checkRelayStatus(md5: string, khpayTxnId?: string): Promise<boolean> {
-  return checkBakongPaymentStatus(md5, khpayTxnId);
-}
 
 async function runPaymentSweep() {
   if (sweepRunning) return;
   sweepRunning = true;
   try {
-    // Find all UNPAID BAKONG orders created within the last 24 hours (no point checking old ones)
+    // Run stale orders sweep first to clean up expired invoices
+    await expireOldOrders();
+
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const pendingOrders = await prisma.order.findMany({
       where: {
-        paymentStatus: 'UNPAID',
-        paymentMethod: 'BAKONG',
+        paymentStatus: 'PENDING',
         createdAt: { gte: cutoff },
       },
       include: {
@@ -130,90 +130,14 @@ async function runPaymentSweep() {
       return;
     }
 
-    console.log(`[Sweeper] Checking ${pendingOrders.length} pending BAKONG order(s)...`);
+    console.log(`[Sweeper] Checking ${pendingOrders.length} pending orders...`);
 
     for (const order of pendingOrders) {
       try {
-        const md5 = order.paymentMd5;
-        if (!md5) continue;
-
-        const khpayTxnId = order.paymentTxnId?.startsWith('bk_') ? order.paymentTxnId : undefined;
-        const isPaid = await checkRelayStatus(md5, khpayTxnId);
-
+        const isPaid = await verifyAbaKhqrPayment(order);
         if (isPaid) {
           console.log(`[Sweeper] ✅ Payment confirmed for order ${order.paymentTxnId}. Auto-delivering...`);
-
-          // Re-verify it's still UNPAID (prevent double delivery in race condition)
-          const freshOrder = await prisma.order.findUnique({
-            where: { id: order.id },
-            include: { package: { include: { product: true } } },
-          });
-          if (!freshOrder || freshOrder.paymentStatus === 'PAID') {
-            console.log(`[Sweeper] Order ${order.paymentTxnId} already processed. Skipping.`);
-            continue;
-          }
-
-          // Mark as PAID first (prevents race condition)
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { paymentStatus: 'PAID', status: 'PROCESSING', gatewayRef: `SWEEP-${md5}` },
-          });
-
-          // Deliver product
-          const { deliverTopup } = await import('./utils/gameProviderMock');
-          const { sendTelegramNotification } = await import('./utils/telegram');
-          const category = order.package.product.category;
-          let deliveredCode: string | null = null;
-          let deliverySuccess = false;
-          let providerRef = '';
-
-          if (category === 'VOUCHER') {
-            const stockItem = await prisma.stock.findFirst({
-              where: { packageId: order.packageId, isUsed: false },
-            });
-            if (stockItem) {
-              await prisma.stock.update({
-                where: { id: stockItem.id },
-                data: { isUsed: true, orderId: order.id },
-              });
-              deliveredCode = stockItem.code;
-              deliverySuccess = true;
-              providerRef = stockItem.id;
-            }
-          } else {
-            const delivery = await deliverTopup(
-              order.package.product.slug,
-              order.playerId,
-              order.playerZoneId,
-              order.package.name,
-              order.package.amount
-            );
-            if (delivery.success) {
-              deliverySuccess = true;
-              providerRef = delivery.referenceId;
-            }
-          }
-
-          const finalStatus = deliverySuccess ? 'SUCCESS' : 'FAILED';
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: finalStatus, stockDeliveredCode: deliveredCode },
-          });
-
-          await sendTelegramNotification(
-            `${deliverySuccess ? '✅ <b>Order Completed (Auto-Sweep)</b>' : '⚠️ <b>Delivery Failed (Auto-Sweep)</b>'}\n` +
-            `-----------------------------------------\n` +
-            `<b>Txn ID:</b> <code>${order.paymentTxnId}</code>\n` +
-            `<b>Game:</b> ${order.package.product.name}\n` +
-            `<b>Package:</b> ${order.package.name}\n` +
-            `<b>Player:</b> <code>${order.playerId}</code>\n` +
-            `<b>Amount:</b> $${order.price.toFixed(2)}\n` +
-            `<b>Status:</b> ${finalStatus}\n` +
-            `${deliveredCode ? `<b>Code:</b> <code>${deliveredCode}</code>\n` : ''}` +
-            `${providerRef ? `<b>Ref:</b> <code>${providerRef}</code>\n` : ''}`
-          );
-
-          console.log(`[Sweeper] Order ${order.paymentTxnId} finalized → ${finalStatus}`);
+          await processVerifiedPayment(order, `SWEEP-${order.paymentMd5 || order.paymentTxnId}`);
         }
       } catch (err) {
         console.error(`[Sweeper] Error checking order ${order.paymentTxnId}:`, err);

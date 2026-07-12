@@ -19,6 +19,16 @@ export default function GameIcon({ slug, className = "h-16 w-16" }: GameIconProp
     imagePath = '/images/games/pubgm.png';
   } else if (normalizedSlug.includes('roblox')) {
     imagePath = '/images/games/roblox.png';
+  } else if (normalizedSlug.includes('blood-strike') || normalizedSlug.includes('bloodstrike')) {
+    imagePath = '/images/games/bloodstrike.png';
+  } else if (normalizedSlug.includes('valorant')) {
+    imagePath = '/images/games/valorant.png';
+  } else if (normalizedSlug.includes('honor-of-kings') || normalizedSlug.includes('hok')) {
+    imagePath = '/images/games/hok.png';
+  } else if (normalizedSlug.includes('farlight')) {
+    imagePath = '/images/games/farlight.png';
+  } else if (normalizedSlug.includes('delta-force') || normalizedSlug.includes('deltaforce')) {
+    imagePath = '/images/games/deltaforce.png';
   }
 
   if (imagePath) {

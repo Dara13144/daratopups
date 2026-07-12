@@ -238,7 +238,7 @@ export default function AdminDashboard() {
           </div>
           {sidebarOpen && (
             <div className="ml-3 overflow-hidden">
-              <div className="text-white font-black text-sm">DaraTopup</div>
+              <div className="text-white font-black text-sm">𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋</div>
               <div className="text-[10px] text-cyan-400 font-semibold">Admin Panel</div>
             </div>
           )}
@@ -277,7 +277,7 @@ export default function AdminDashboard() {
         <header className="sticky top-0 z-20 flex items-center justify-between px-6 py-3.5 border-b border-slate-800" style={{ background: 'rgba(2,6,23,.95)', backdropFilter: 'blur(12px)' }}>
           <div>
             <h1 className="text-base font-black text-white">{navItems.find(n => n.id === activeTab)?.label}</h1>
-            <p className="text-[10px] text-slate-500">DaraTopup Admin Dashboard</p>
+            <p className="text-[10px] text-slate-500">𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋 Admin Dashboard</p>
           </div>
           <div className="flex items-center space-x-3">
             <button onClick={loadAllData} disabled={loading} className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition-all disabled:opacity-50">

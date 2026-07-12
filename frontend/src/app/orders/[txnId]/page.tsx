@@ -20,13 +20,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(true);
-  const [md5Checking, setMd5Checking] = useState(false);
-  const [md5LastChecked, setMd5LastChecked] = useState<Date | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [verifyStatus, setVerifyStatus] = useState<'idle' | 'checking' | 'not_paid' | 'paid'>('idle');
   const { t } = useLanguage();
 
   // Polling ref/timer
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const md5PollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     params.then((p) => setTxnId(p.txnId));
@@ -40,7 +39,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       setOrder(data);
       
       // Stop polling if order has reached terminal states
-      if (data.status === 'COMPLETED' || data.status === 'SUCCESS' || data.status === 'FAILED') {
+      if (data.status === 'COMPLETED' || data.status === 'SUCCESS' || data.status === 'PAID' || data.status === 'FAILED' || data.status === 'CANCELLED') {
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
@@ -54,30 +53,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     }
   };
 
-  // Real-time MD5 check against Bakong Relay API
-  const checkMd5Payment = async (md5: string) => {
-    if (!md5 || md5Checking) return;
-    setMd5Checking(true);
+  // Manual verify button handler
+  const handleManualVerify = async () => {
+    if (verifyStatus === 'checking') return;
+    setVerifyStatus('checking');
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${API_BASE}/api/orders/check-md5/${md5}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMd5LastChecked(new Date());
-        if (data.paid) {
-          // MD5 confirmed paid — refresh order status immediately
-          await fetchStatus(false);
-          // Stop MD5 polling if paid
-          if (md5PollRef.current) {
-            clearInterval(md5PollRef.current);
-            md5PollRef.current = null;
-          }
-        }
-      }
+      await fetchStatus(false);
+      setVerifyStatus('idle');
     } catch (e) {
-      // Silently ignore network errors on background check
-    } finally {
-      setMd5Checking(false);
+      setVerifyStatus('idle');
     }
   };
 
@@ -94,26 +78,45 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
-      if (md5PollRef.current) clearInterval(md5PollRef.current);
     };
   }, [txnId]);
 
-  // Start MD5 real-time polling when order has a paymentMd5 and is still PENDING
+  // Countdown Timer hook
   useEffect(() => {
-    if (!order) return;
-    const isPending = order.status === 'PENDING' && order.paymentStatus !== 'PAID';
-    const md5 = order.paymentMd5;
-
-    if (isPending && md5 && !md5PollRef.current) {
-      // Check MD5 every 3 seconds
-      md5PollRef.current = setInterval(() => {
-        checkMd5Payment(md5);
-      }, 3000);
-    } else if (!isPending && md5PollRef.current) {
-      clearInterval(md5PollRef.current);
-      md5PollRef.current = null;
+    if (!order || order.status !== 'PENDING') {
+      setTimeLeft(null);
+      return;
     }
-  }, [order?.status, order?.paymentStatus, order?.paymentMd5]);
+
+    const calculateTimeLeft = () => {
+      const createdAt = new Date(order.createdAt).getTime();
+      const now = Date.now();
+      const elapsedSecs = Math.floor((now - createdAt) / 1000);
+      const validitySecs = 15; // 15 seconds
+      const remaining = validitySecs - elapsedSecs;
+      return remaining > 0 ? remaining : 0;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const intervalId = setInterval(() => {
+      const remaining = calculateTimeLeft();
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(intervalId);
+        // Refresh status
+        fetchStatus(false);
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [order]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -346,75 +349,57 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                           <span className="h-3 w-3 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
                           <span>Waiting for payment...</span>
                         </div>
-                        {/* Live MD5 check indicator */}
-                        {order.paymentMd5 && (
-                          <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-400 font-medium select-none">
-                            {md5Checking ? (
-                              <>
-                                <span className="h-2 w-2 border border-cyan-400 border-t-transparent rounded-full animate-spin"></span>
-                                <span className="text-cyan-400 font-semibold">Checking Bakong MD5...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
-                                <span>
-                                  MD5 live check active
-                                  {md5LastChecked && (
-                                    <> · Last: {md5LastChecked.toLocaleTimeString()}</>
-                                  )}
-                                </span>
-                              </>
-                            )}
+                        {timeLeft !== null && timeLeft > 0 && (
+                          <div className="text-slate-500 font-bold text-xs mt-1.5 font-sans select-none">
+                            Code expires in: <span className="text-red-500 font-black">{formatTime(timeLeft)}</span>
                           </div>
                         )}
+                        {/* Live check indicator */}
+                        <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-400 font-medium select-none">
+                          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                          <span>Gateway live check active</span>
+                        </div>
+
+                        {/* Manual Verify Payment Button */}
+                        <div className="pt-2">
+                          <button
+                            id="verify-payment-btn"
+                            onClick={handleManualVerify}
+                            disabled={verifyStatus === 'checking'}
+                            className={`w-full py-2.5 rounded-xl font-extrabold text-xs tracking-wide uppercase transition-all shadow-sm flex items-center justify-center space-x-2 ${
+                              verifyStatus === 'checking'
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : verifyStatus === 'paid'
+                                ? 'bg-emerald-500 text-white'
+                                : verifyStatus === 'not_paid'
+                                ? 'bg-red-500/90 text-white hover:bg-red-600'
+                                : 'bg-[#E51821] text-white hover:bg-[#c01019] active:scale-[0.98]'
+                            }`}
+                          >
+                            {verifyStatus === 'checking' && (
+                              <span className="h-3.5 w-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                            )}
+                            {verifyStatus === 'paid' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {verifyStatus === 'not_paid' && <XCircle className="h-3.5 w-3.5" />}
+                            <span>
+                              {verifyStatus === 'checking' ? 'Verifying...' :
+                               verifyStatus === 'paid' ? 'Payment Confirmed ✅' :
+                               verifyStatus === 'not_paid' ? 'Not Paid Yet — Try Again' :
+                               'Verify My Payment'}
+                            </span>
+                          </button>
+                          {verifyStatus === 'not_paid' && (
+                            <p className="text-red-400 text-[10px] font-semibold mt-1.5 text-center select-none">
+                              ⚠️ Payment not detected. Please scan and pay first, then tap Verify.
+                            </p>
+                          )}
+                        </div>
+
                       </div>
 
                     </div>
 
-                    {/* I've Paid — Force Verify Button */}
-                    <div className="mt-4 max-w-[300px] w-full space-y-2">
-                      <button
-                        id="btn-ive-paid"
-                        disabled={verifying}
-                        onClick={async () => {
-                          if (!order) return;
-                          setVerifying(true);
-                          setVerifyMsg('');
-                          try {
-                            const result = await verifyPayment(order.paymentTxnId);
-                            if (result.verified) {
-                              setVerifyMsg('✅ Payment confirmed! Delivering your product...');
-                              // Refresh order state immediately
-                              await fetchStatus(false);
-                            } else {
-                              setVerifyMsg(result.message || '❌ Payment not detected yet. Please wait and try again.');
-                            }
-                          } catch {
-                            setVerifyMsg('❌ Verification failed. Please try again.');
-                          } finally {
-                            setVerifying(false);
-                          }
-                        }}
-                        className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-950 disabled:text-slate-550 text-white font-extrabold text-xs shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all"
-                      >
-                        {verifying ? (
-                          <>
-                            <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Verifying...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-4.5 w-4.5" />
-                            <span>I&apos;ve Paid — Verify Now</span>
-                          </>
-                        )}
-                      </button>
-                      {verifyMsg && (
-                        <p className={`text-xs text-center font-semibold px-2 ${verifyMsg.startsWith('✅') ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {verifyMsg}
-                        </p>
-                      )}
-                    </div>
+
                   </div>
 
                 ) : (
@@ -468,7 +453,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
             )}
 
             {/* PAYMENT SUCCESS STATUS STATE */}
-            {(order.status === 'COMPLETED' || order.status === 'SUCCESS') && (
+            {(order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') && (
               <div className="glass-panel p-8 bg-slate-950/40 border-emerald-500/20 text-center space-y-4">
                 <div className="h-16 w-16 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-400 mx-auto">
                   <CheckCircle2 className="h-10 w-10" />
@@ -527,7 +512,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
             )}
 
             {/* PAYMENT FAILURE STATE */}
-            {order.status === 'FAILED' && (
+            {(order.status === 'FAILED' || order.status === 'CANCELLED') && (
               <div className="glass-panel p-8 bg-slate-950/40 border-red-500/20 text-center space-y-4">
                 <div className="h-16 w-16 bg-red-500/10 rounded-full flex items-center justify-center text-red-400 mx-auto">
                   <XCircle className="h-10 w-10" />
@@ -561,7 +546,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                   <Clock className="h-4 w-4 text-cyan-400" />
                   <span>{t.statusLabel}: </span>
                   <span className={`font-bold select-none capitalize ${
-                    (order.status === 'COMPLETED' || order.status === 'SUCCESS') ? 'text-emerald-400' : order.status === 'PENDING' ? 'text-amber-400' : 'text-red-400'
+                    (order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') ? 'text-emerald-400' : order.status === 'PENDING' ? 'text-amber-400' : 'text-red-400'
                   }`}>
                     {order.status}
                   </span>
@@ -602,7 +587,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.paymentStatusLabel}:</span>
                   <span className={`font-bold text-right uppercase ${
-                    order.paymentStatus === 'PAID' ? 'text-emerald-400' : order.paymentStatus === 'UNPAID' ? 'text-amber-400' : 'text-red-400'
+                    order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS' ? 'text-emerald-400' : order.paymentStatus === 'PENDING' || order.paymentStatus === 'UNPAID' ? 'text-amber-400' : 'text-red-400'
                   }`}>
                     {order.paymentStatus}
                   </span>
@@ -617,32 +602,36 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
               </div>
 
               {/* Status information notice */}
-              <div className="p-3 bg-slate-900/30 border border-slate-850 rounded-lg text-[10px] text-slate-500 flex items-start space-x-1.5 leading-normal">
-                <Info className="h-4.5 w-4.5 text-cyan-500 shrink-0 mt-0.5" />
-                <p>
-                  {t.invoiceNotice}
-                </p>
-              </div>
-
-              {/* 100% Security Trust Badge */}
-              <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-left">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-emerald-400">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">សន្តិសុខសុវត្ថិភាព 100% / 100% Secure</h4>
-                  <p className="text-slate-400 text-[10px] leading-tight mt-0.5">
-                    ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ និងការផ្ទៀងផ្ទាត់ការទូទាត់ស្វ័យប្រវត្តិតាមរយៈ Bakong KHQR dynamic check។
+              {order.status === 'PENDING' && (
+                <div className="p-3 bg-slate-900/30 border border-slate-850 rounded-lg text-[10px] text-slate-500 flex items-start space-x-1.5 leading-normal">
+                  <Info className="h-4.5 w-4.5 text-cyan-500 shrink-0 mt-0.5" />
+                  <p>
+                    {t.invoiceNotice}
                   </p>
                 </div>
-              </div>
+              )}
+
+              {/* 100% Security Trust Badge */}
+              {order.status === 'PENDING' && (
+                <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-left">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-emerald-400">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">សន្តិសុខសុវត្ថិភាព 100% / 100% Secure</h4>
+                    <p className="text-slate-400 text-[10px] leading-tight mt-0.5">
+                      ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ និងការផ្ទៀងផ្ទាត់ការទូទាត់ស្វ័យប្រវត្តិតាមរយៈ Bakong KHQR dynamic check។
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
         </div>
 
         {/* PAYMENT SUCCESS OVERLAY MODAL */}
-        {(order.status === 'COMPLETED' || order.status === 'SUCCESS') && showSuccessModal && (
+        {(order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') && showSuccessModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
             <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl relative border border-slate-100 flex flex-col p-6 text-slate-800 animate-in fade-in zoom-in duration-200">
               

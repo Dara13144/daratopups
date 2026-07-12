@@ -121,6 +121,42 @@ export async function generateBakongKHQR(
   const amountStr = amount.toFixed(2);
   console.log(`[Bakong KHQR Generator] Starting generation for Txn ID: "${tranId}", Amount: $${amountStr}, Item Name: "${itemName}"`);
 
+  // ── 0. MEATIKA KHQR API (khqr-api.meatika.dev) ──────────────────────────
+  const meatikaApiKey = process.env.MEATIKA_API_KEY || 
+                        (process.env.BAKONG_TOKEN?.startsWith('sk_') ? process.env.BAKONG_TOKEN : '') || 
+                        '';
+  const meatikaApiUrl = process.env.MEATIKA_API_URL || 
+                        (process.env.BAKONG_API?.includes('meatika') ? process.env.BAKONG_API : '') || 
+                        'https://khqr-api.meatika.dev/api';
+
+  if (meatikaApiKey) {
+    try {
+      const generateUrl = `${meatikaApiUrl}/generate-khqr?amount=${parseFloat(amountStr)}&api_key=${meatikaApiKey}`;
+      console.log(`[Bakong KHQR Generator] Trying Meatika: ${generateUrl}`);
+
+      const apiRes = await fetch(generateUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+
+      console.log(`[Bakong KHQR Generator] Meatika response status: ${apiRes.status}`);
+      if (apiRes.ok) {
+        const resData = await apiRes.json() as any;
+        console.log('[Bakong KHQR Generator] Meatika Response JSON:', JSON.stringify(resData));
+        if (resData.qr_string && resData.md5) {
+          console.log('[Bakong KHQR Generator] ✅ KHQR generated successfully via Meatika.');
+          return {
+            qrCode: resData.qr_string,
+            md5:    resData.md5.toLowerCase().trim(),
+            txnId:  tranId,
+          };
+        }
+      }
+    } catch (apiErr: any) {
+      console.error('[Bakong KHQR Generator] Meatika generation failed:', apiErr.message || apiErr);
+    }
+  }
+
   // ── 1. KHPAY API (khpay.site) ────────────────────────────────────────────
   const khpayUrl = process.env.KHPAY_API_URL;
   const khpayToken = process.env.KHPAY_API_KEY;
@@ -168,16 +204,88 @@ export async function generateBakongKHQR(
 
   // ── 2. BAKONG RELAY API (api.bakongrelay.com) ───────────────────────────
   const relayUrl   = process.env.BAKONG_RELAY_URL   || 'https://api.bakongrelay.com/v1';
-  const relayToken = process.env.BAKONG_RELAY_TOKEN  || process.env.BAKONG_TOKEN || '';
+  const token = process.env.BAKONG_RELAY_TOKEN || process.env.BAKONG_TOKEN || '';
+  const isRelay = token.startsWith('rbkn') || !!process.env.BAKONG_RELAY_TOKEN;
+  const relayToken = isRelay ? token : '';
   const accountId  = (process.env.BAKONG_ACCOUNT_ID  || 'dara_mao1@bkrt').trim().replace(/['"]/g, '');
   const merchantName = (process.env.BAKONG_MERCHANT_NAME || 'DaraShop').trim().replace(/['"]/g, '');
   const merchantCity = (process.env.BAKONG_MERCHANT_CITY || 'Phnom Penh').trim().replace(/['"]/g, '');
 
   if (relayToken) {
     try {
+      // 1. Try Bakong Relay Web Checkout Session
+      try {
+        const checkoutUrl = `${relayUrl}/web_checkouts/create`;
+        console.log(`[Bakong KHQR Generator] Trying Web Checkout Create: ${checkoutUrl}`);
+        const isKhrAccount = accountId.toLowerCase().endsWith('@bkrt');
+        const currency = isKhrAccount ? 'KHR' : 'USD';
+        const finalAmount = isKhrAccount ? Math.round(amount * 4100) : parseFloat(amountStr);
+
+        const payload = {
+          trans_id: tranId,
+          req_custom: { lang: "km", ttl: 5 },
+          req_khqr: {
+            account_id: accountId,
+            merchant_name: merchantName.slice(0, 25),
+            merchant_city: merchantCity.slice(0, 15),
+            amount: finalAmount,
+            currency: currency
+          },
+          req_url: {
+            return_url: `https://daratopup.com/orders/${tranId}`,
+            webhook_url: `https://daratopup.com/api/webhooks`
+          }
+        };
+
+        const apiRes = await fetch(checkoutUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${relayToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(6000),
+        });
+
+        if (apiRes.ok) {
+          const resData = await apiRes.json() as any;
+          if (resData.responseCode === 0 && resData.data?.session_id) {
+            const sessionId = resData.data.session_id;
+            console.log(`[Bakong KHQR Generator] Web checkout session created: ${sessionId}. Querying details...`);
+
+            const detailsUrl = `${relayUrl}/web_checkouts/details`;
+            const detailsRes = await fetch(detailsUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${relayToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ session_id: sessionId }),
+              signal: AbortSignal.timeout(6000),
+            });
+
+            if (detailsRes.ok) {
+              const detailsData = await detailsRes.json() as any;
+              if (detailsData.responseCode === 0 && detailsData.data?.req_khqr?.qr_string) {
+                console.log('[Bakong KHQR Generator] ✅ KHQR generated successfully via Web Checkout.');
+                return {
+                  qrCode: detailsData.data.req_khqr.qr_string,
+                  md5:    (detailsData.data.req_khqr.md5 || '').toLowerCase().trim(),
+                  txnId:  tranId,
+                  gatewayRef: sessionId,
+                } as any;
+              }
+            }
+          }
+        }
+      } catch (checkoutErr: any) {
+        console.warn(`[Bakong KHQR Generator] Web Checkout method failed, falling back to generate_qr:`, checkoutErr.message || checkoutErr);
+      }
+
+      // 2. Fallback to traditional generate_qr
       const generateUrl = `${relayUrl}/generate_qr`;
       const billNumber = tranId.slice(-25);
-      console.log(`[Bakong KHQR Generator] Trying Bakong Relay: ${generateUrl} with account: ${accountId}`);
+      console.log(`[Bakong KHQR Generator] Trying Bakong Relay generate_qr: ${generateUrl} with account: ${accountId}`);
 
       const apiRes = await fetch(generateUrl, {
         method: 'POST',
@@ -194,15 +302,14 @@ export async function generateBakongKHQR(
           bill_number:   billNumber,
           static:        false,
         }),
-        signal: AbortSignal.timeout(5000), // 5 seconds timeout
+        signal: AbortSignal.timeout(5000),
       });
 
-      console.log(`[Bakong KHQR Generator] Bakong Relay response status: ${apiRes.status}`);
       if (apiRes.ok) {
         const resData = await apiRes.json() as any;
         console.log('[Bakong KHQR Generator] Bakong Relay Response JSON:', JSON.stringify(resData));
         if (resData.responseCode === 0 && resData.data?.qr && resData.data?.md5) {
-          console.log('[Bakong KHQR Generator] ✅ KHQR generated successfully via Bakong Relay.');
+          console.log('[Bakong KHQR Generator] ✅ KHQR generated successfully via Bakong Relay generate_qr.');
           return {
             qrCode: resData.data.qr,
             md5:    resData.data.md5.toLowerCase().trim(),
@@ -254,12 +361,19 @@ export async function generateBakongKHQR(
   };
 }
 
+export interface PaymentVerificationContext {
+  expectedAmount?: number;
+  expectedCurrency?: string;
+  expectedMerchantId?: string;
+}
+
 /**
  * Checks Bakong payment status using multiple methods/gateways sequentially for maximum reliability.
  */
 export async function checkBakongPaymentStatus(
   md5: string,
-  khpayTxnId?: string
+  khpayTxnId?: string,
+  ctx?: PaymentVerificationContext
 ): Promise<boolean> {
   const sanitizedMd5 = md5 ? md5.toLowerCase().trim() : '';
   console.log(`[Payment Verification] Verifying payment for MD5: "${sanitizedMd5}", KHPAY ID: "${khpayTxnId || 'N/A'}"`);
@@ -267,6 +381,100 @@ export async function checkBakongPaymentStatus(
   if (!sanitizedMd5) {
     console.warn('[Payment Verification] ❌ Verification aborted: MD5 is empty.');
     return false;
+  }
+
+  // ── 00. Meatika Payment Status Check ───────────────────────────────────────
+  const meatikaApiKey = process.env.MEATIKA_API_KEY || 
+                        (process.env.BAKONG_TOKEN?.startsWith('sk_') ? process.env.BAKONG_TOKEN : '') || 
+                        '';
+  const meatikaApiUrl = process.env.MEATIKA_API_URL || 
+                        (process.env.BAKONG_API?.includes('meatika') ? process.env.BAKONG_API : '') || 
+                        'https://khqr-api.meatika.dev/api';
+
+  if (meatikaApiKey) {
+    try {
+      const checkUrl = `${meatikaApiUrl}/check-payment-status?md5=${sanitizedMd5}&api_key=${meatikaApiKey}`;
+      console.log(`[Payment Verification] [Meatika] Checking: ${checkUrl}`);
+      const res = await fetch(checkUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const result = await res.json() as any;
+        console.log(`[Payment Verification] [Meatika] Response:`, JSON.stringify(result));
+        const statusUpper = typeof result.status === 'string' ? result.status.toUpperCase().trim() : '';
+        if (
+          statusUpper === 'PAID' || 
+          statusUpper === 'SUCCESS' || 
+          statusUpper === 'COMPLETED' || 
+          statusUpper === 'COMPLETED_PAYMENT' || 
+          result.paid === true || 
+          result.success === true ||
+          result.is_paid === true
+        ) {
+          console.log(`[Payment Verification] ✅ Confirmed PAID via Meatika check-payment-status`);
+          return true;
+        }
+      }
+    } catch (err: any) {
+      console.error('[Payment Verification] [Meatika] Check error/timeout:', err.message || err);
+    }
+  }
+
+  // ── 0. Web Checkout Session check (Bakong Relay) ──────────────────────────
+  const relayUrl   = process.env.BAKONG_RELAY_URL   || 'https://api.bakongrelay.com/v1';
+  const token = process.env.BAKONG_RELAY_TOKEN || process.env.BAKONG_TOKEN || '';
+  const isRelay = token.startsWith('rbkn') || !!process.env.BAKONG_RELAY_TOKEN;
+  const relayToken = isRelay ? token : '';
+
+  if (relayToken) {
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const prismaClient = new PrismaClient();
+      const order = await prismaClient.order.findFirst({
+        where: {
+          OR: [
+            { paymentMd5: sanitizedMd5 },
+            { paymentMd5: sanitizedMd5.toUpperCase() },
+            { paymentTxnId: khpayTxnId }
+          ]
+        }
+      });
+      
+      const sessionId = order?.gatewayRef;
+      await prismaClient.$disconnect();
+
+      if (sessionId) {
+        const checkUrl = `${relayUrl}/web_checkouts/details`;
+        console.log(`[Payment Verification] [Bakong Relay Web Checkout] Checking session: ${checkUrl} session_id=${sessionId}`);
+        const res = await fetch(checkUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${relayToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ session_id: sessionId }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (res.ok) {
+          const result = await res.json() as any;
+          console.log(`[Payment Verification] [Bakong Relay Web Checkout] Response:`, JSON.stringify(result));
+          if (result.responseCode === 0 && result.data) {
+            const statusUpper = typeof result.data.status === 'string' ? result.data.status.toUpperCase() : '';
+            if (statusUpper === 'PAID') {
+              console.log(`[Payment Verification] ✅ Confirmed PAID via Bakong Relay web_checkouts/details`);
+              return true;
+            } else if (statusUpper === 'EXPIRED') {
+              console.log(`[Payment Verification] ❌ Session EXPIRED via Bakong Relay web_checkouts/details`);
+              return false;
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('[Payment Verification] [Bakong Relay Web Checkout] Check error:', err.message || err);
+    }
   }
 
   // ── Sandbox Auto-Approve simulation bypass ──────────────────────────────────
@@ -278,6 +486,7 @@ export async function checkBakongPaymentStatus(
         where: {
           OR: [
             { paymentMd5: sanitizedMd5 },
+            { paymentMd5: sanitizedMd5.toUpperCase() },
             { paymentTxnId: khpayTxnId }
           ]
         }
@@ -338,6 +547,21 @@ export async function checkBakongPaymentStatus(
         const data = await res.json() as any;
         console.log(`[Payment Verification] [KHPAY] check/md5 Response:`, JSON.stringify(data));
         if (data.success && data.data) {
+          // Verify amount
+          if (ctx?.expectedAmount !== undefined && data.data.amount !== undefined) {
+            const gatewayAmt = parseFloat(data.data.amount);
+            if (Math.abs(gatewayAmt - ctx.expectedAmount) > 0.001) {
+              console.error(`[Payment Verification] ❌ AMOUNT MISMATCH (KHPAY)! Expected: ${ctx.expectedAmount}, Gateway: ${gatewayAmt}. Rejecting.`);
+              return false;
+            }
+          }
+          // Verify currency
+          if (ctx?.expectedCurrency !== undefined && data.data.currency !== undefined) {
+            if (data.data.currency.toUpperCase() !== ctx.expectedCurrency.toUpperCase()) {
+              console.error(`[Payment Verification] ❌ CURRENCY MISMATCH (KHPAY)! Expected: ${ctx.expectedCurrency}, Gateway: ${data.data.currency}. Rejecting.`);
+              return false;
+            }
+          }
           const statusUpper = typeof data.data.status === 'string' ? data.data.status.toUpperCase() : '';
           if (statusUpper === 'PAID' || statusUpper === 'SUCCESS' || data.data.paid === true) {
             console.log(`[Payment Verification] ✅ Confirmed PAID via KHPAY POST /bakong/check`);
@@ -353,9 +577,6 @@ export async function checkBakongPaymentStatus(
   }
 
   // ── 2. BAKONG RELAY API status check ──────────────────────────────────────
-  const relayUrl   = process.env.BAKONG_RELAY_URL   || 'https://api.bakongrelay.com/v1';
-  const relayToken = process.env.BAKONG_RELAY_TOKEN  || process.env.BAKONG_TOKEN || '';
-
   if (relayToken) {
     try {
       const checkUrl = `${relayUrl}/check_transaction_by_md5`;
@@ -373,6 +594,31 @@ export async function checkBakongPaymentStatus(
         const result = await res.json() as any;
         console.log(`[Payment Verification] [Bakong Relay] Response:`, JSON.stringify(result));
         if (result.responseCode === 0 && result.data) {
+          // Verify amount
+          if (ctx?.expectedAmount !== undefined && result.data.amount !== undefined) {
+            const gatewayAmt = parseFloat(result.data.amount);
+            if (Math.abs(gatewayAmt - ctx.expectedAmount) > 0.001) {
+              console.error(`[Payment Verification] ❌ AMOUNT MISMATCH (Relay)! Expected: ${ctx.expectedAmount}, Gateway: ${gatewayAmt}. Rejecting.`);
+              return false;
+            }
+          }
+          // Verify currency
+          if (ctx?.expectedCurrency !== undefined && result.data.currency !== undefined) {
+            if (result.data.currency.toUpperCase() !== ctx.expectedCurrency.toUpperCase()) {
+              console.error(`[Payment Verification] ❌ CURRENCY MISMATCH (Relay)! Expected: ${ctx.expectedCurrency}, Gateway: ${result.data.currency}. Rejecting.`);
+              return false;
+            }
+          }
+          // Verify merchant ID
+          const expectedMerchant = (ctx?.expectedMerchantId || process.env.BAKONG_ACCOUNT_ID || '').replace(/['"]/g, '').trim();
+          const gatewayMerchantRaw = result.data.toAccountId || result.data.receiving_account_id || result.data.receivingAccountId;
+          if (expectedMerchant && gatewayMerchantRaw) {
+            const gatewayMerchant = gatewayMerchantRaw.trim().toLowerCase();
+            if (gatewayMerchant !== expectedMerchant.trim().toLowerCase()) {
+              console.error(`[Payment Verification] ❌ MERCHANT MISMATCH (Relay)! Expected: ${expectedMerchant}, Gateway: ${gatewayMerchant}. Rejecting.`);
+              return false;
+            }
+          }
           console.log(`[Payment Verification] ✅ Confirmed PAID via Bakong Relay check_transaction_by_md5`);
           return true;
         }
@@ -386,7 +632,9 @@ export async function checkBakongPaymentStatus(
 
   // ── 3. NBC OpenAPI fallback check ──────────────────────────────────────────
   const bakongApiUrl = process.env.BAKONG_API || 'https://api-bakong.nbc.gov.kh';
-  const bakongToken  = process.env.BAKONG_TOKEN || '';
+  const tokenForNbc = process.env.BAKONG_RELAY_TOKEN || process.env.BAKONG_TOKEN || '';
+  const isRelayForNbc = tokenForNbc.startsWith('rbkn') || !!process.env.BAKONG_RELAY_TOKEN;
+  const bakongToken  = !isRelayForNbc ? (process.env.BAKONG_TOKEN || '') : '';
 
   if (bakongToken) {
     try {
@@ -409,6 +657,31 @@ export async function checkBakongPaymentStatus(
         const result = await res.json() as any;
         console.log(`[Payment Verification] [NBC API] Response:`, JSON.stringify(result));
         if (result && (result.responseCode === 0 || result.responseCode === '0' || result.responseCode === 200) && result.data) {
+          // Verify amount
+          if (ctx?.expectedAmount !== undefined && result.data.amount !== undefined) {
+            const gatewayAmt = parseFloat(result.data.amount);
+            if (Math.abs(gatewayAmt - ctx.expectedAmount) > 0.001) {
+              console.error(`[Payment Verification] ❌ AMOUNT MISMATCH (NBC)! Expected: ${ctx.expectedAmount}, Gateway: ${gatewayAmt}. Rejecting.`);
+              return false;
+            }
+          }
+          // Verify currency
+          if (ctx?.expectedCurrency !== undefined && result.data.currency !== undefined) {
+            if (result.data.currency.toUpperCase() !== ctx.expectedCurrency.toUpperCase()) {
+              console.error(`[Payment Verification] ❌ CURRENCY MISMATCH (NBC)! Expected: ${ctx.expectedCurrency}, Gateway: ${result.data.currency}. Rejecting.`);
+              return false;
+            }
+          }
+          // Verify merchant ID
+          const expectedMerchant = (ctx?.expectedMerchantId || process.env.BAKONG_ACCOUNT_ID || '').replace(/['"]/g, '').trim();
+          const gatewayMerchantRaw = result.data.toAccountId || result.data.receiving_account_id || result.data.receivingAccountId;
+          if (expectedMerchant && gatewayMerchantRaw) {
+            const gatewayMerchant = gatewayMerchantRaw.trim().toLowerCase();
+            if (gatewayMerchant !== expectedMerchant.trim().toLowerCase()) {
+              console.error(`[Payment Verification] ❌ MERCHANT MISMATCH (NBC)! Expected: ${expectedMerchant}, Gateway: ${gatewayMerchant}. Rejecting.`);
+              return false;
+            }
+          }
           console.log(`[Payment Verification] ✅ Confirmed PAID via NBC OpenAPI check_transaction_by_md5`);
           return true;
         }
@@ -447,6 +720,9 @@ export function verifyBakongWebhook(
 ): boolean {
   const dataToSign = `${md5Hash}${transactionId}`;
   const expectedSig = crypto.createHmac('sha512', apiKey).update(dataToSign).digest('hex');
+  if (!signature || expectedSig.length !== signature.length) {
+    return false;
+  }
   return crypto.timingSafeEqual(
     Buffer.from(expectedSig, 'hex'),
     Buffer.from(signature, 'hex')

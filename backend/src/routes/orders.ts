@@ -1,9 +1,10 @@
 import { Router, Response } from 'express';
 import prisma from '../prisma';
-import { authenticateJWT, AuthenticatedRequest } from '../middleware/auth';
-import { lookupPlayerNickname, deliverTopup } from '../utils/gameProviderMock';
-import { generateABAMockPayment, generateBakongKHQR, verifyBakongWebhook, checkBakongPaymentStatus } from '../utils/paymentMock';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { lookupPlayerNickname } from '../utils/gameProviderMock';
+import { generateABAMockPayment, generateBakongKHQR, verifyBakongWebhook } from '../utils/paymentMock';
 import { sendTelegramNotification } from '../utils/telegram';
+import { verifyAbaKhqrPayment, processVerifiedPayment } from '../utils/paymentVerification';
 
 const router = Router();
 
@@ -116,14 +117,44 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
         price: pkg.price,
         status: 'PENDING',
         paymentMethod,
-        paymentStatus: 'UNPAID',
+        paymentStatus: 'PENDING',
         paymentTxnId,
         paymentQrCode,
         paymentMd5,
+        gatewayRef: (paymentDetails as any)?.gatewayRef || null,
+        deliveryStatus: 'WAITING',
       },
     });
 
     // Send Telegram Alert for new order
+    const productSlug = pkg.product.slug || '';
+    const isMLBB = productSlug.includes('mobile-legends');
+    const isFreeFire = productSlug.includes('free-fire');
+    const isValorant = productSlug.includes('valorant');
+    const isBloodStrike = productSlug.includes('blood-strike');
+    const isHoK = productSlug.includes('honor-of-kings');
+    const isFarlight = productSlug.includes('farlight');
+    const isDeltaForce = productSlug.includes('delta-force');
+
+    let credentialsLabel = `<b>Player ID:</b> <code>${playerId}</code>`;
+    if (isMLBB) {
+      credentialsLabel = `<b>Mobile Legends ID:</b> <code>${playerId}</code>\n<b>Server ID:</b> <code>${playerZoneId || 'N/A'}</code>`;
+    } else if (isFreeFire) {
+      credentialsLabel = `<b>Free Fire ID:</b> <code>${playerId}</code>`;
+    } else if (isValorant) {
+      credentialsLabel = `<b>Valorant ID:</b> <code>${playerId}</code>`;
+    } else if (isBloodStrike) {
+      credentialsLabel = `<b>Blood Strike ID:</b> <code>${playerId}</code>`;
+    } else if (isHoK) {
+      credentialsLabel = `<b>Honor of Kings ID:</b> <code>${playerId}</code>`;
+    } else if (isFarlight) {
+      credentialsLabel = `<b>Farlight 84 ID:</b> <code>${playerId}</code>`;
+    } else if (isDeltaForce) {
+      credentialsLabel = `<b>Delta Force ID:</b> <code>${playerId}</code>`;
+    } else if (playerZoneId) {
+      credentialsLabel = `<b>Player ID:</b> <code>${playerId}</code>\n<b>Server/Zone ID:</b> <code>${playerZoneId}</code>`;
+    }
+
     const telegramMessage = 
       `🛒 <b>New Order Placed!</b>\n` +
       `-----------------------------------------\n` +
@@ -131,7 +162,7 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       `<b>Txn ID:</b> <code>${paymentTxnId}</code>\n` +
       `<b>Game:</b> ${pkg.product.name}\n` +
       `<b>Package:</b> ${pkg.name}\n` +
-      `<b>Player ID:</b> <code>${playerId}</code>${playerZoneId ? ` (${playerZoneId})` : ''}\n` +
+      `${credentialsLabel}\n` +
       `<b>Nickname:</b> ${nickname}\n` +
       `<b>Price:</b> $${pkg.price.toFixed(2)}\n` +
       `<b>Payment:</b> ${paymentMethod}\n` +
@@ -157,233 +188,33 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-// Helper function to check payment status via multiple gateways (KHPAY, Bakong Relay, NBC)
-async function checkBakongTransactionStatus(md5: string, khpayTxnId?: string): Promise<boolean> {
-  return checkBakongPaymentStatus(md5, khpayTxnId);
-}
 
-// Helper function to process successful payment & execute product delivery
-async function handleSuccessfulPayment(order: any, gatewayRef: string) {
-  // 1. Mark payment as PAID, and status as PROCESSING
-  let currentOrder = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      paymentStatus: 'PAID',
-      status: 'PROCESSING',
-      gatewayRef,
-    },
-  });
-
-  console.log(`[Payment Processor] Processing top-up delivery for order ${order.paymentTxnId}...`);
-
-  // 2. Deliver the Digital product
-  const category = order.package.product.category;
-  let deliverySuccess = false;
-  let deliveredCode: string | null = null;
-  let providerRef = '';
-  let errorMessage = '';
-
-  if (category === 'VOUCHER') {
-    // Stock Voucher Code Delivery
-    const stockItem = await prisma.stock.findFirst({
-      where: {
-        packageId: order.packageId,
-        isUsed: false,
-      },
-    });
-
-    if (stockItem) {
-      // Link the stock item to this order
-      await prisma.stock.update({
-        where: { id: stockItem.id },
-        data: {
-          isUsed: true,
-          orderId: order.id,
-        },
-      });
-
-      deliveredCode = stockItem.code;
-      deliverySuccess = true;
-      providerRef = stockItem.id;
-    } else {
-      errorMessage = 'OUT OF STOCK: No digital codes left for this package. Contact support for refund/manual stock.';
-    }
-  } else {
-    // Mobile/PC Direct Top-up delivery API
-    const delivery = await deliverTopup(
-      order.package.product.slug,
-      order.playerId,
-      order.playerZoneId,
-      order.package.name,
-      order.package.amount
-    );
-
-    if (delivery.success) {
-      deliverySuccess = true;
-      providerRef = delivery.referenceId;
-    } else {
-      errorMessage = delivery.error || 'Provider API failure';
-    }
-  }
-
-  // 3. Update order final status
-  const finalStatus = deliverySuccess ? 'SUCCESS' : 'FAILED';
-  currentOrder = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: finalStatus,
-      stockDeliveredCode: deliveredCode,
-    },
-  });
-
-  // 4. Send Telegram completed notification
-  const telegramMessage = 
-    `${deliverySuccess ? '✅ <b>Order Top-Up Completed!</b>' : '⚠️ <b>Delivery Failure (Action Needed)</b>'}\n` +
-    `-----------------------------------------\n` +
-    `<b>Txn ID:</b> <code>${order.paymentTxnId}</code>\n` +
-    `<b>Game:</b> ${order.package.product.name}\n` +
-    `<b>Package:</b> ${order.package.name}\n` +
-    `<b>Player ID:</b> <code>${order.playerId}</code>${order.playerZoneId ? ` (${order.playerZoneId})` : ''}\n` +
-    `<b>Nickname:</b> ${order.playerNickname}\n` +
-    `<b>Amount Paid:</b> $${order.price.toFixed(2)} (${order.paymentMethod})\n` +
-    `<b>Status:</b> ${finalStatus}\n` +
-    `${deliveredCode ? `<b>Delivered Code:</b> <code>${deliveredCode}</code>\n` : ''}` +
-    `${providerRef ? `<b>Provider Ref:</b> <code>${providerRef}</code>\n` : ''}` +
-    `${errorMessage ? `<b>Error:</b> <pre>${errorMessage}</pre>\n` : ''}`;
-
-  await sendTelegramNotification(telegramMessage);
-  return { currentOrder, deliverySuccess, deliveredCode, providerRef, errorMessage };
-}
-
-// ── REAL-TIME MD5 CHECK ENDPOINT ──────────────────────────────────────────────
-// Called by the frontend every 3s during active KHQR payment waiting.
-// Directly hits Bakong Relay API check_transaction_by_md5 and auto-delivers
-// if the payment is confirmed.
-router.get('/check-md5/:md5', async (req, res) => {
-  try {
-    const { md5 } = req.params;
-    const sanitizedMd5 = md5?.toLowerCase().trim();
-
-    if (!sanitizedMd5) {
-      return res.status(400).json({ paid: false, error: 'MD5 required' });
-    }
-
-    // Find the order by MD5
-    const order = await prisma.order.findFirst({
-      where: { paymentMd5: sanitizedMd5 },
-      include: { package: { include: { product: true } } },
-    });
-
-    if (!order) {
-      return res.status(404).json({ paid: false, error: 'Order not found for this MD5' });
-    }
-
-    // If already paid/completed, return instantly
-    if (order.paymentStatus === 'PAID' || order.status === 'SUCCESS' || order.status === 'COMPLETED') {
-      return res.status(200).json({
-        paid: true,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        txnId: order.paymentTxnId,
-        alreadyProcessed: true,
-      });
-    }
-
-    // Real-time check against Bakong APIs
-    const isPaid = await checkBakongPaymentStatus(sanitizedMd5);
-    console.log(`[MD5-Check] md5=${sanitizedMd5} → isPaid=${isPaid}`);
-
-    if (!isPaid) {
-      return res.status(200).json({
-        paid: false,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        txnId: order.paymentTxnId,
-        md5: sanitizedMd5,
-      });
-    }
-
-    // Payment confirmed — prevent double-processing with optimistic lock
-    const freshOrder = await prisma.order.findUnique({
-      where: { id: order.id },
-      include: { package: { include: { product: true } } },
-    });
-
-    if (!freshOrder || freshOrder.paymentStatus === 'PAID') {
-      return res.status(200).json({
-        paid: true,
-        status: freshOrder?.status || 'SUCCESS',
-        paymentStatus: 'PAID',
-        txnId: order.paymentTxnId,
-        alreadyProcessed: true,
-      });
-    }
-
-    // Process the payment delivery
-    console.log(`[MD5-Check] ✅ Confirmed paid — triggering delivery for ${order.paymentTxnId}`);
-    const result = await handleSuccessfulPayment(freshOrder, `MD5CHECK-${sanitizedMd5}`);
-
-    return res.status(200).json({
-      paid: true,
-      status: result.currentOrder.status,
-      paymentStatus: result.currentOrder.paymentStatus,
-      deliverySuccess: result.deliverySuccess,
-      deliveredCode: result.deliveredCode,
-      txnId: order.paymentTxnId,
-      message: result.deliverySuccess
-        ? 'Payment confirmed and product delivered!'
-        : 'Payment confirmed but delivery failed. Please contact support.',
-    });
-  } catch (error) {
-    console.error('[MD5-Check] Error:', error);
-    return res.status(500).json({ paid: false, error: 'Internal server error' });
-  }
-});
 
 // 2. Fetch specific order status (Public - used by polling)
+// GET /api/orders/status/:txnId
 router.get('/status/:txnId', async (req, res) => {
   try {
     const { txnId } = req.params;
     let order = await prisma.order.findUnique({
       where: { paymentTxnId: txnId },
-      include: {
-        package: {
-          include: { product: true },
-        },
-      },
+      include: { package: { include: { product: true } } },
     });
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-
-    // Auto payment checking for pending Bakong orders
-    if (order.paymentStatus === 'UNPAID' && order.paymentMethod === 'BAKONG') {
-      const md5 = order.paymentMd5 || await (async () => {
-        const pkg = order.package;
-        const itemName = `${pkg.product.name} - ${pkg.name}`;
-        const res = await generateBakongKHQR(order.paymentTxnId, order.price, itemName);
-        return res.md5;
-      })();
-
-      // Pass the khpay transaction_id (starts with 'bk_') for faster primary check
-      const khpayTxnId = order.paymentTxnId?.startsWith('bk_') ? order.paymentTxnId : undefined;
-      const isPaid = await checkBakongTransactionStatus(md5, khpayTxnId);
+    // Auto payment checking for pending orders (server-side only, gateway validated)
+    if ((order.paymentStatus === 'PENDING') && (order.paymentMethod === 'BAKONG' || order.paymentMethod === 'ABA')) {
+      const isPaid = await verifyAbaKhqrPayment(order);
       if (isPaid) {
-        console.log(`[Status Polling] Order ${txnId} payment detected. Processing order...`);
-        await handleSuccessfulPayment(order, `KHPAY-AUTO-${md5}`);
+        console.log(`[Status Polling] Order ${txnId} payment confirmed. Processing delivery...`);
+        const result = await processVerifiedPayment(order, `POLL-AUTO-${order.paymentMd5 || txnId}`);
         const updatedOrder = await prisma.order.findUnique({
           where: { paymentTxnId: txnId },
-          include: {
-            package: {
-              include: { product: true },
-            },
-          },
+          include: { package: { include: { product: true } } },
         });
-        if (updatedOrder) {
-          order = updatedOrder;
-        }
+        if (updatedOrder) order = updatedOrder;
       }
     }
 
@@ -421,7 +252,7 @@ router.get('/status/:txnId', async (req, res) => {
       paymentQrCode: order.paymentQrCode,
       paymentMd5: order.paymentMd5,
       createdAt: order.createdAt,
-      merchantName: process.env.BAKONG_MERCHANT_NAME || 'TOPUP SITE CO LTD',
+      merchantName: process.env.BAKONG_MERCHANT_NAME || 'Daratopup',
       abaPayload,
       abaApiUrl,
     });
@@ -436,7 +267,7 @@ router.get('/status/:txnId', async (req, res) => {
 router.post('/verify/:txnId', async (req, res) => {
   try {
     const { txnId } = req.params;
-    console.log(`[Verify] Force-verifying payment for order: ${txnId}`);
+    console.log(`[Verify] Manual verify request for order: ${txnId}`);
 
     const order = await prisma.order.findUnique({
       where: { paymentTxnId: txnId },
@@ -448,7 +279,7 @@ router.post('/verify/:txnId', async (req, res) => {
     }
 
     // Already paid — return success immediately
-    if (order.paymentStatus === 'PAID') {
+    if (order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS') {
       return res.status(200).json({
         verified: true,
         status: order.status,
@@ -457,33 +288,38 @@ router.post('/verify/:txnId', async (req, res) => {
       });
     }
 
-    if (order.paymentMethod !== 'BAKONG') {
-      return res.status(400).json({ verified: false, error: 'Verify only supports BAKONG orders' });
+    if (order.paymentStatus === 'EXPIRED') {
+      return res.status(410).json({ verified: false, error: 'Order has expired. Please create a new order.' });
     }
 
-    const md5 = order.paymentMd5;
-    if (!md5) {
-      return res.status(400).json({ verified: false, error: 'No MD5 hash on record for this order' });
+    // Expire orders older than 15 seconds
+    const orderAgeMs = Date.now() - new Date(order.createdAt).getTime();
+    if (orderAgeMs > 15 * 1000) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: 'EXPIRED', status: 'CANCELLED', deliveryStatus: 'FAILED' },
+      });
+      return res.status(410).json({ verified: false, error: 'Order has expired. Please create a new order.' });
     }
 
-    // Check payment status right now
-    const khpayTxnId = order.paymentTxnId?.startsWith('bk_') ? order.paymentTxnId : undefined;
-    const isPaid = await checkBakongTransactionStatus(md5, khpayTxnId);
+    if (order.paymentMethod !== 'BAKONG' && order.paymentMethod !== 'ABA' && process.env.SANDBOX_MODE !== 'true') {
+      return res.status(400).json({ verified: false, error: 'Verify only supports BAKONG/ABA orders' });
+    }
+
+    // Delegate verification to paymentVerification service
+    const isPaid = await verifyAbaKhqrPayment(order);
 
     if (!isPaid) {
-      console.log(`[Verify] Order ${txnId} — payment NOT confirmed yet (MD5: ${md5})`);
       return res.status(200).json({
         verified: false,
         status: order.status,
         paymentStatus: order.paymentStatus,
-        md5,
-        message: 'Payment not yet confirmed. Please wait a moment and try again.',
+        message: 'Payment not yet confirmed. Please wait and try again.',
       });
     }
 
-    // Payment confirmed — process delivery
-    console.log(`[Verify] ✅ Payment confirmed for order ${txnId}. Processing delivery...`);
-    const result = await handleSuccessfulPayment(order, `VERIFY-${md5}`);
+    console.log(`[Verify] Payment confirmed for order ${txnId}. Processing delivery...`);
+    const result = await processVerifiedPayment(order, `VERIFY-${order.paymentMd5 || txnId}`);
 
     return res.status(200).json({
       verified: true,
@@ -541,11 +377,7 @@ router.post('/simulate-callback', async (req, res) => {
 
     const order = await prisma.order.findUnique({
       where: { paymentTxnId: txnId },
-      include: {
-        package: {
-          include: { product: true },
-        },
-      },
+      include: { package: { include: { product: true } } },
     });
 
     if (!order) {
@@ -565,6 +397,7 @@ router.post('/simulate-callback', async (req, res) => {
         data: {
           paymentStatus: 'EXPIRED',
           status: 'FAILED',
+          deliveryStatus: 'FAILED',
         },
       });
 
@@ -579,17 +412,17 @@ router.post('/simulate-callback', async (req, res) => {
       return res.status(200).json({ message: 'Order payment status set to failed', order: updatedOrder });
     }
 
-    // 1. Process order payment using the helper
+    // Process order payment using the verification service
     const ref = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
     console.log(`[Payment Callback] Payment successful for order ${txnId}. Processing top-up...`);
-    const result = await handleSuccessfulPayment(order, ref);
+    const result = await processVerifiedPayment(order, ref);
 
     return res.status(200).json({
       message: 'Simulated payment callback executed successfully',
       delivery: {
         success: result.deliverySuccess,
         code: result.deliveredCode,
-        error: result.errorMessage,
+        error: '',
       },
       order: result.currentOrder,
     });
@@ -600,20 +433,13 @@ router.post('/simulate-callback', async (req, res) => {
 });
 
 // 5. REAL BAKONG KHQR PAYMENT WEBHOOK (Production)
-// Bakong sends this POST when a customer scans and pays the KHQR.
-// Endpoint MUST be registered in your Bakong Business portal as the callback URL.
-// Set BAKONG_API_KEY in your .env file to enable signature verification.
-// 5. REAL BAKONG KHQR PAYMENT WEBHOOK (Production)
-// Bakong sends this POST when a customer scans and pays the KHQR.
-// Endpoint MUST be registered in your Bakong Business portal as the callback URL.
-// Set BAKONG_API_KEY in your .env file to enable signature verification.
 router.post('/bakong-callback', async (req, res) => {
   try {
     console.log('[Bakong Webhook] 📥 Received callback request.');
     console.log('[Bakong Webhook] Request headers:', JSON.stringify(req.headers));
     console.log('[Bakong Webhook] Request body:', JSON.stringify(req.body, null, 2));
 
-    // Resolve MD5 using all possible paths from both Bakong Relay and KHPAY formats
+    // Resolve MD5 using all possible paths
     const rawMd5 = req.body.md5 || 
                    req.body.md5Hash || 
                    req.body.req_khqr?.md5 || 
@@ -624,12 +450,18 @@ router.post('/bakong-callback', async (req, res) => {
 
     // Resolve Transaction ID using all possible paths
     const transactionId = req.body.transactionId || 
-                          req.body.transaction_id || 
-                          req.body.bill_number || 
-                          req.body.req_khqr?.bill_number || 
-                          req.body.data?.bill_number || 
-                          req.body.data?.transaction_id || 
-                          req.body.data?.trans_id;
+                           req.body.transaction_id || 
+                           req.body.trans_id || 
+                           req.body.bill_number || 
+                           req.body.req_khqr?.bill_number || 
+                           req.body.data?.bill_number || 
+                           req.body.data?.transaction_id || 
+                           req.body.data?.trans_id;
+
+    // Resolve Session ID
+    const sessionId = req.body.session_id || 
+                      req.body.data?.session_id || 
+                      req.body.id;
 
     // Resolve Status using all possible paths
     const rawStatus = req.body.status || 
@@ -641,18 +473,21 @@ router.post('/bakong-callback', async (req, res) => {
                    req.body.req_khqr?.amount || 
                    req.body.data?.amount;
 
-    console.log(`[Bakong Webhook] Parsed variables: MD5="${sanitizedMd5}", TxnID="${transactionId || 'N/A'}", Status="${rawStatus || 'N/A'}", Amount="${amount || 'N/A'}"`);
+    // Resolve Currency using all possible paths
+    const currency = req.body.currency ||
+                     req.body.req_khqr?.currency ||
+                     req.body.data?.currency;
+
+    console.log(`[Bakong Webhook] Parsed variables: MD5="${sanitizedMd5}", TxnID="${transactionId || 'N/A'}", SessionID="${sessionId || 'N/A'}", Status="${rawStatus || 'N/A'}", Amount="${amount || 'N/A'}", Currency="${currency || 'N/A'}"`);
 
     const signature = req.headers['x-bakong-signature'] as string;
     const bakongApiKey = process.env.BAKONG_API_KEY || '';
 
-    // ── Signature Verification ────────────────────────────────────────────────
-    // If BAKONG_API_KEY is set, verify the webhook signature.
-    // In development (no key set), we skip verification and trust the payload.
+    // Webhook signature verification
     if (bakongApiKey && signature) {
       const isValid = verifyBakongWebhook(rawMd5 || '', transactionId || '', signature, bakongApiKey);
       if (!isValid) {
-        console.warn('[Bakong Webhook] ⚠️ Invalid signature! Possible spoofed callback. Rejecting.');
+        console.warn('[Bakong Webhook] ⚠️ Invalid signature! Rejecting.');
         return res.status(401).json({ error: 'Invalid webhook signature' });
       }
       console.log('[Bakong Webhook] ✅ Signature verified.');
@@ -660,15 +495,21 @@ router.post('/bakong-callback', async (req, res) => {
       console.log('[Bakong Webhook] ⚠️ BAKONG_API_KEY not set — skipping signature verification (sandbox mode).');
     }
 
-    if (!transactionId && !sanitizedMd5) {
-      console.warn('[Bakong Webhook] ❌ Error: Neither transactionId nor md5 is present in webhook payload.');
-      return res.status(400).json({ error: 'transactionId or md5 is required in webhook payload' });
+    if (!transactionId && !sanitizedMd5 && !sessionId) {
+      console.warn('[Bakong Webhook] ❌ Error: Neither transactionId, md5, nor sessionId is present.');
+      return res.status(400).json({ error: 'transactionId, md5, or session_id is required' });
     }
 
-    // ── Find Order ────────────────────────────────────────────────────────────
+    // Find Order
     let order = null;
-    if (transactionId) {
-      console.log(`[Bakong Webhook] Attempting order lookup by paymentTxnId: "${transactionId}"`);
+    if (sessionId) {
+      order = await prisma.order.findFirst({
+        where: { gatewayRef: sessionId },
+        include: { package: { include: { product: true } } },
+      });
+    }
+
+    if (!order && transactionId) {
       order = await prisma.order.findUnique({
         where: { paymentTxnId: transactionId },
         include: { package: { include: { product: true } } },
@@ -676,7 +517,6 @@ router.post('/bakong-callback', async (req, res) => {
     }
 
     if (!order && sanitizedMd5) {
-      console.log(`[Bakong Webhook] Order not found by txnId. Attempting case-insensitive MD5 lookup: "${sanitizedMd5}"`);
       order = await prisma.order.findFirst({
         where: {
           OR: [
@@ -689,18 +529,47 @@ router.post('/bakong-callback', async (req, res) => {
     }
 
     if (!order) {
-      console.warn(`[Bakong Webhook] ❌ Order NOT found in database for txnId: "${transactionId || 'N/A'}" or md5: "${sanitizedMd5 || 'N/A'}"`);
+      console.warn(`[Bakong Webhook] ❌ Order NOT found for sessionId: "${sessionId || 'N/A'}", txnId: "${transactionId || 'N/A'}" or md5: "${sanitizedMd5 || 'N/A'}"`);
       return res.status(200).json({ message: 'Order not found, acknowledged' });
     }
 
-    console.log(`[Bakong Webhook] Found Order ID: "${order.id}", Current status: "${order.status}", Current paymentStatus: "${order.paymentStatus}"`);
-
     if (order.paymentStatus === 'PAID') {
-      console.log(`[Bakong Webhook] Order ${order.paymentTxnId} already marked as PAID. Skipping.`);
+      console.log(`[Bakong Webhook] Order ${order.paymentTxnId} already marked PAID. Skipping.`);
       return res.status(200).json({ message: 'Order already processed' });
     }
 
-    // ── Handle Payment Status ─────────────────────────────────────────────────
+    // Verify Amount and Currency
+    if (amount) {
+      const parsedAmount = parseFloat(amount);
+      const webhookCurrency = currency ? currency.toString().toUpperCase().trim() : 'USD';
+      
+      let isAmountMatch = false;
+      if (webhookCurrency === 'KHR') {
+        const expectedKhr = Math.round(order.price * 4100);
+        isAmountMatch = Math.abs(parsedAmount - expectedKhr) <= 10;
+        if (!isAmountMatch) {
+          console.warn(`[Bakong Webhook] ❌ Amount mismatch (KHR)! Webhook=${parsedAmount}, Order expected KHR=${expectedKhr} (Order price USD=${order.price})`);
+        }
+      } else {
+        isAmountMatch = Math.abs(parsedAmount - order.price) <= 0.05;
+        if (!isAmountMatch) {
+          console.warn(`[Bakong Webhook] ❌ Amount mismatch (USD)! Webhook=${parsedAmount}, Order expected USD=${order.price}`);
+        }
+      }
+
+      if (!isAmountMatch) {
+        return res.status(400).json({ error: 'Amount mismatch' });
+      }
+    }
+
+    if (currency) {
+      const normalizedCurrency = currency.toString().toUpperCase().trim();
+      if (normalizedCurrency !== 'USD' && normalizedCurrency !== 'KHR') {
+        console.warn(`[Bakong Webhook] ❌ Currency not supported! Webhook currency=${normalizedCurrency}`);
+        return res.status(400).json({ error: 'Currency not supported' });
+      }
+    }
+
     const isSuccess = typeof rawStatus === 'string' && 
       ['PAID', 'SUCCESS', 'paid', 'success'].includes(rawStatus.toUpperCase());
 
@@ -708,7 +577,7 @@ router.post('/bakong-callback', async (req, res) => {
       console.warn(`[Bakong Webhook] ⚠️ Payment reported unsuccessful. Raw status: "${rawStatus}"`);
       await prisma.order.update({
         where: { id: order.id },
-        data: { paymentStatus: 'EXPIRED', status: 'FAILED' },
+        data: { paymentStatus: 'FAILED', status: 'FAILED', deliveryStatus: 'FAILED' },
       });
       await sendTelegramNotification(
         `❌ <b>Bakong Payment Failed</b>\n` +
@@ -720,10 +589,22 @@ router.post('/bakong-callback', async (req, res) => {
       return res.status(200).json({ message: 'Payment failure recorded' });
     }
 
-    // ── Successful Payment: Mark PAID and Process Delivery ────────────────────
+    // Replay attack check
+    const replayCheck = await prisma.order.findFirst({
+      where: {
+        paymentMd5: sanitizedMd5 || order.paymentMd5 || '',
+        paymentStatus: 'PAID',
+        id: { not: order.id }
+      }
+    });
+    if (replayCheck) {
+      console.warn(`[Bakong Webhook] ❌ Replay attack detected! MD5 "${sanitizedMd5}" already used by paid order "${replayCheck.paymentTxnId}".`);
+      return res.status(409).json({ error: 'Transaction already used' });
+    }
+
     const ref = `BAKONG-${sanitizedMd5 || Date.now()}`;
-    console.log(`[Bakong Webhook] ✅ Payment confirmed for order "${order.paymentTxnId}". Processing top-up delivery...`);
-    const result = await handleSuccessfulPayment(order, ref);
+    console.log(`[Bakong Webhook] ✅ Payment confirmed for order "${order.paymentTxnId}". Processing delivery...`);
+    const result = await processVerifiedPayment(order, ref);
 
     console.log(`[Bakong Webhook] Order update complete. finalStatus="${result.currentOrder.status}"`);
     return res.status(200).json({

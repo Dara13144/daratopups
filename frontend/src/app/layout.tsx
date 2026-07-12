@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DaraTopup - Game Recharge in Cambodia | Diamonds & Vouchers",
-  description: "DaraTopup: Fastest game diamond top-ups and gift vouchers in Cambodia. Supports ABA PayWay and Bakong KHQR auto-payment.",
+  title: "𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋 - Game Recharge in Cambodia | Diamonds & Vouchers",
+  description: "𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋: Fastest game diamond top-ups and gift vouchers in Cambodia. Supports ABA PayWay and Bakong KHQR auto-payment.",
 };
 
 export default function RootLayout({

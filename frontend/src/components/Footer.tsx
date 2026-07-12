@@ -43,7 +43,7 @@ export default function Footer() {
         {/* Footer Bottom info */}
         <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500">
           <p>
-            © {new Date().getFullYear()} DaraTopup. All rights reserved.
+            © {new Date().getFullYear()} 𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋. All rights reserved.
           </p>
         </div>
       </div>

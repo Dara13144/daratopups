@@ -113,7 +113,10 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     if (showPaymentModal && activeOrder) {
       intervalId = setInterval(async () => {
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/orders/status/${activeOrder.paymentTxnId}`);
+          const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').endsWith('/api')
+            ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000')
+            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api`;
+          const res = await fetch(`${apiBaseUrl}/orders/status/${activeOrder.paymentTxnId}`);
           if (res.ok) {
             const data = await res.json();
             if (data.status === 'SUCCESS' || data.status === 'COMPLETED') {
@@ -174,6 +177,40 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     }
   };
 
+  // Auto-verify Player ID after typing pauses (800ms debounce)
+  useEffect(() => {
+    if (!playerId.trim()) {
+      setNickname('');
+      setLookupError('');
+      setLookupSuccess(false);
+      return;
+    }
+
+    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
+    if (isMLBB && !playerZoneId.trim()) {
+      return;
+    }
+
+    // Validation checks to prevent premature queries while typing
+    if (slug === 'free-fire' || slug.startsWith('free-fire-')) {
+      if (!/^\d{5,12}$/.test(playerId.trim())) return;
+    } else if (slug === 'pubg-mobile') {
+      if (!/^\d{5,15}$/.test(playerId.trim())) return;
+    } else if (slug === 'valorant') {
+      if (!playerId.includes('#') || playerId.trim().length < 5) return;
+    } else if (isMLBB) {
+      if (!/^\d{3,10}$/.test(playerId.trim()) || !/^\d{3,10}$/.test(playerZoneId.trim())) return;
+    } else {
+      if (playerId.trim().length < 3) return;
+    }
+
+    const timer = setTimeout(() => {
+      handleLookup();
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [playerId, playerZoneId, slug]);
+
   const handleOrderSubmit = async () => {
     if (!playerId) {
       setError(t.nicknameRequired);
@@ -189,7 +226,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       return;
     }
 
-    const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB;
+    const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB || slug === 'pubg-mobile' || slug === 'valorant' || slug === 'blood-strike' || slug === 'honor-of-kings' || slug === 'farlight-84' || slug === 'delta-force';
     if (isValidationNeeded && !lookupSuccess) {
       setError('Please validate your Player ID/Nickname before placing order');
       return;
@@ -344,7 +381,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               </div>
 
               {/* Verify Nickname button & status indicator */}
-              {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
+              {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-') || product.slug === 'pubg-mobile' || product.slug === 'valorant' || product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (
                 <div className="mt-4 pt-4 border-t border-slate-900/60 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
@@ -498,16 +535,12 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 <h3 className="text-white font-bold text-base">{t.choosePaymentGateway}</h3>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 max-w-sm gap-4">
                 {/* Bakong KHQR */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('BAKONG')}
-                  className={`p-4 rounded-xl border flex items-center space-x-4 transition-all text-left ${
-                    paymentMethod === 'BAKONG'
-                      ? 'border-violet-500 bg-violet-950/10'
-                      : 'border-slate-900 bg-slate-950/50 hover:border-slate-800'
-                  }`}
+                  className="p-4 rounded-xl border border-violet-500 bg-violet-950/10 flex items-center space-x-4 transition-all text-left w-full cursor-default"
                 >
                   <div className="h-10 w-10 rounded-lg overflow-hidden shrink-0">
                     <img
@@ -519,51 +552,6 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                   <div>
                     <h4 className="text-white font-bold text-sm">Bakong KHQR</h4>
                     <span className="text-slate-400 text-[10px] leading-tight block mt-0.5">{t.bakongDesc}</span>
-                  </div>
-                </button>
-
-                {/* ABA PayWay */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('ABA')}
-                  className={`p-4 rounded-xl border flex items-center space-x-4 transition-all text-left ${
-                    paymentMethod === 'ABA'
-                      ? 'border-cyan-500 bg-cyan-950/10'
-                      : 'border-slate-900 bg-slate-950/50 hover:border-slate-800'
-                  }`}
-                >
-                  <div className="h-10 w-10 rounded-lg bg-cyan-500/10 flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-8">
-                      <rect width="40" height="40" rx="8" fill="#0891b2" fillOpacity="0.15"/>
-                      <text x="50%" y="56%" dominantBaseline="middle" textAnchor="middle" fill="#22d3ee" fontFamily="Arial" fontWeight="900" fontSize="11">ABA</text>
-                    </svg>
-                  </div>
-                  <div>
-                    <h4 className="text-white font-bold text-sm">ABA PayWay</h4>
-                    <span className="text-slate-400 text-[10px] leading-tight block mt-0.5">{t.abaDesc}</span>
-                  </div>
-                </button>
-
-                {/* Canadia Bank */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('CANADIA')}
-                  className={`p-4 rounded-xl border flex items-center space-x-4 transition-all text-left ${
-                    paymentMethod === 'CANADIA'
-                      ? 'border-red-500 bg-red-950/10'
-                      : 'border-slate-900 bg-slate-950/50 hover:border-slate-800'
-                  }`}
-                >
-                  <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-                    <img 
-                      src="/images/payments/canadia.png" 
-                      alt="Canadia Bank" 
-                      className="h-8 w-8 object-contain"
-                    />
-                  </div>
-                  <div>
-                    <h4 className="text-white font-bold text-sm">{t.canadiaTitle}</h4>
-                    <span className="text-slate-400 text-[10px] leading-tight block mt-0.5">{t.canadiaDesc}</span>
                   </div>
                 </button>
               </div>

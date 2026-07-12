@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:5000/api';
+const serverUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`;
+
 
 export interface GameProduct {
   id: string;

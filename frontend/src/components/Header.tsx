@@ -67,10 +67,10 @@ export default function Header() {
             </div>
             <div className="flex flex-col leading-none">
               <span className="font-black text-lg tracking-tight bg-gradient-to-r from-orange-400 to-cyan-400 bg-clip-text text-transparent">
-                DaraTopup
+                𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋
               </span>
-              <span className="text-[9px] text-slate-500 font-semibold tracking-widest uppercase">
-                Game Recharge
+              <span className="text-[9px] text-slate-500 font-semibold">
+                • គុណភាព • សុវត្ថិភាព • តម្លៃសមរម្យ
               </span>
             </div>
           </Link>

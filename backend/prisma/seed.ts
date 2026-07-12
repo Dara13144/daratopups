@@ -179,39 +179,87 @@ async function main() {
     },
   });
 
-  // 9. HONOR OF KINGS (Out of stock)
+  // 9. HONOR OF KINGS
+  const hokPackages = [
+    { name: '88 Tokens', amount: 88, price: 0.99, category: 'BEST_SELLER' },
+    { name: '432 Tokens', amount: 432, price: 4.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '905 Tokens', amount: 905, price: 9.99, category: 'NORMAL' },
+    { name: '2475 Tokens', amount: 2475, price: 24.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '4950 Tokens', amount: 4950, price: 49.99, category: 'NORMAL' },
+    { name: '10000 Tokens', amount: 10000, price: 99.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
   await prisma.product.create({
     data: {
       name: 'HONOR OF KINGS',
       slug: 'honor-of-kings',
-      image: '/images/games/pubgm.png',
+      image: '/images/games/hok.png',
       category: 'MOBILE_GAME',
-      isActive: false,
-      packages: { create: [] },
+      isActive: true,
+      packages: { create: hokPackages },
     },
   });
 
-  // 10. PUBG MOBILE (Out of stock)
+  // 10. PUBG MOBILE
+  const pubgmPackages = [
+    { name: '60 UC', amount: 60, price: 0.99, category: 'BEST_SELLER' },
+    { name: '325 UC', amount: 325, price: 4.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '660 UC', amount: 660, price: 9.99, category: 'NORMAL' },
+    { name: '1800 UC', amount: 1800, price: 24.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '3850 UC', amount: 3850, price: 49.99, category: 'NORMAL' },
+    { name: '8100 UC', amount: 8100, price: 99.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
   await prisma.product.create({
     data: {
       name: 'PUBG MOBILE',
       slug: 'pubg-mobile',
       image: '/images/games/pubgm.png',
       category: 'MOBILE_GAME',
-      isActive: false,
-      packages: { create: [] },
+      isActive: true,
+      packages: { create: pubgmPackages },
     },
   });
 
-  // 11. BLOOD STRIKE (Out of stock)
+  // 11. BLOOD STRIKE
+  const bloodStrikePackages = [
+    { name: '100 Gold', amount: 100, price: 0.99, category: 'BEST_SELLER' },
+    { name: '500 Gold', amount: 500, price: 4.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '1000 Gold', amount: 1000, price: 9.99, category: 'NORMAL' },
+    { name: '2500 Gold', amount: 2500, price: 24.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '5000 Gold', amount: 5000, price: 49.99, category: 'NORMAL' },
+    { name: '10000 Gold', amount: 10000, price: 99.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
   await prisma.product.create({
     data: {
       name: 'BLOOD STRIKE',
       slug: 'blood-strike',
-      image: '/images/games/roblox.png',
+      image: '/images/games/bloodstrike.png',
       category: 'MOBILE_GAME',
-      isActive: false,
-      packages: { create: [] },
+      isActive: true,
+      packages: { create: bloodStrikePackages },
+    },
+  });
+
+  // 11b. VALORANT
+  const valorantPackages = [
+    { name: '475 VP', amount: 475, price: 4.99, category: 'BEST_SELLER' },
+    { name: '1000 VP', amount: 1000, price: 9.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '2050 VP', amount: 2050, price: 19.99, category: 'NORMAL' },
+    { name: '3650 VP', amount: 3650, price: 34.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '5350 VP', amount: 5350, price: 49.99, category: 'NORMAL' },
+    { name: '11000 VP', amount: 11000, price: 99.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
+  await prisma.product.create({
+    data: {
+      name: 'VALORANT',
+      slug: 'valorant',
+      image: '/images/games/valorant.png',
+      category: 'PC_GAME',
+      isActive: true,
+      packages: { create: valorantPackages },
     },
   });
 
@@ -224,6 +272,48 @@ async function main() {
       category: 'MOBILE_GAME',
       isActive: false,
       packages: { create: [] },
+    },
+  });
+
+  // 13. FARLIGHT 84
+  const farlightPackages = [
+    { name: '60 Diamonds', amount: 60, price: 0.99, category: 'BEST_SELLER' },
+    { name: '350 Diamonds', amount: 350, price: 4.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '720 Diamonds', amount: 720, price: 9.99, category: 'NORMAL' },
+    { name: '1440 Diamonds', amount: 1440, price: 19.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '2880 Diamonds', amount: 2880, price: 39.99, category: 'NORMAL' },
+    { name: '5760 Diamonds', amount: 5760, price: 79.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
+  await prisma.product.create({
+    data: {
+      name: 'FARLIGHT 84',
+      slug: 'farlight-84',
+      image: '/images/games/farlight.png',
+      category: 'MOBILE_GAME',
+      isActive: true,
+      packages: { create: farlightPackages },
+    },
+  });
+
+  // 14. DELTA FORCE
+  const deltaforcePackages = [
+    { name: '100 Delta Coins', amount: 100, price: 0.99, category: 'BEST_SELLER' },
+    { name: '500 Delta Coins', amount: 500, price: 4.99, category: 'BEST_SELLER', badge: 'ពេញនិយម' },
+    { name: '1000 Delta Coins', amount: 1000, price: 9.99, category: 'NORMAL' },
+    { name: '2000 Delta Coins', amount: 2000, price: 19.99, category: 'NORMAL', badge: 'ពេញនិយម' },
+    { name: '5000 Delta Coins', amount: 5000, price: 49.99, category: 'NORMAL' },
+    { name: '10000 Delta Coins', amount: 10000, price: 99.99, category: 'NORMAL', badge: 'កញ្ចប់ពិសេស 💎' },
+  ];
+
+  await prisma.product.create({
+    data: {
+      name: 'DELTA FORCE',
+      slug: 'delta-force',
+      image: '/images/games/deltaforce.png',
+      category: 'PC_GAME',
+      isActive: true,
+      packages: { create: deltaforcePackages },
     },
   });
 
