@@ -130,7 +130,7 @@ export async function createOrder(
   paymentMethod: 'ABA' | 'BAKONG' | 'CANADIA',
   email?: string
 ): Promise<OrderCreateResponse> {
-  const headers: any = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   
   // Inject auth token if available
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

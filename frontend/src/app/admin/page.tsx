@@ -56,16 +56,6 @@ export default function AdminDashboard() {
   const [promptCode, setPromptCode] = useState('');
   const [activePromptOrderId, setActivePromptOrderId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('user_role');
-    if (!token || role !== 'ADMIN') { router.push('/login'); return; }
-    setIsAdmin(true); loadAllData();
-  }, [router]);
-
-  useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(''), 4000); return () => clearTimeout(t); } }, [success]);
-  useEffect(() => { if (error) { const t = setTimeout(() => setError(''), 6000); return () => clearTimeout(t); } }, [error]);
-
   const loadAllData = async () => {
     setLoading(true); setError('');
     try {
@@ -81,6 +71,16 @@ export default function AdminDashboard() {
     } catch { setError('Failed to load data. Is backend running?'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('user_role');
+    if (!token || role !== 'ADMIN') { router.push('/login'); return; }
+    setIsAdmin(true); loadAllData();
+  }, [router]);
+
+  useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(''), 4000); return () => clearTimeout(t); } }, [success]);
+  useEffect(() => { if (error) { const t = setTimeout(() => setError(''), 6000); return () => clearTimeout(t); } }, [error]);
 
   const uploadImageToServer = async (file: File): Promise<string> => {
     setUploadingImage(true);
