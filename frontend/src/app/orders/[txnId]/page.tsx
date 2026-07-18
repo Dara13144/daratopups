@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails, API_BASE } from '../../../lib/api';
-import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
@@ -92,7 +92,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       const createdAt = new Date(order.createdAt).getTime();
       const now = Date.now();
       const elapsedSecs = Math.floor((now - createdAt) / 1000);
-      const validitySecs = 15; // 15 seconds
+      const validitySecs = 180; // 3 minutes validity
       const remaining = validitySecs - elapsedSecs;
       return remaining > 0 ? remaining : 0;
     };
@@ -297,111 +297,137 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
               <div className="glass-panel p-6 bg-slate-950/40 border-slate-900 text-center">
                 
                 {isKhqr ? (
-                  /* KHQR SCAN FLOW (Bakong / Canadia) */
+                  /* KHQR SCAN FLOW (Bakong / Canadia / ABA) */
                   <div className="flex flex-col items-center">
-                    <span className="inline-flex items-center space-x-1.5 text-[10px] font-extrabold tracking-wider text-purple-400 uppercase bg-[#251c3d] border border-purple-500/20 px-3.5 py-1.5 rounded-full shadow-sm mb-4 select-none">
-                      <QrCode className="h-3.5 w-3.5" />
-                      <span>{order.paymentMethod === 'CANADIA' ? t.canadiaTitle : 'ស្កេនទូទាត់ បាគង/KHQR'}</span>
-                    </span>
+                    
+                    {/* Header Bar: Back Chevron + ABA KHQR Title + Animated Circular Countdown */}
+                    <div className="flex items-center justify-between w-full max-w-[320px] mb-4 text-slate-200">
+                      <div className="flex items-center space-x-2 font-bold text-sm">
+                        <Link href="/" className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-all">
+                          <ChevronLeft className="h-4 w-4" />
+                        </Link>
+                        <span className="font-extrabold text-base tracking-wide text-white">
+                          {order.paymentMethod === 'CANADIA' ? 'CANADIA KHQR' : 'ABA KHQR'}
+                        </span>
+                      </div>
+                      
+                      {/* Circular Countdown Timer */}
+                      <div className="flex items-center space-x-2 font-mono text-xs text-slate-300 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full shadow-inner">
+                        <div className="relative w-4 h-4 flex items-center justify-center">
+                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                            <path
+                              className="text-slate-800"
+                              strokeWidth="4"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                            <path
+                              className="text-cyan-400 transition-all duration-1000 ease-linear"
+                              strokeDasharray="100, 100"
+                              strokeDashoffset={100 - ((timeLeft || 0) / 180) * 100}
+                              strokeWidth="4"
+                              strokeLinecap="round"
+                              stroke="currentColor"
+                              fill="none"
+                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                            />
+                          </svg>
+                        </div>
+                        <span className="font-extrabold text-cyan-400">{formatTime(timeLeft || 0)}</span>
+                      </div>
+                    </div>
 
-                    {/* Official KHQR Ticket Card Container */}
-                    <div className="w-full max-w-[300px] bg-white rounded-3xl overflow-hidden shadow-2xl border border-slate-200 mb-6 flex flex-col text-slate-800 animate-in fade-in duration-200">
-                      {/* Red KHQR Header */}
-                      <div className="bg-[#E51821] py-4 px-6 flex items-center justify-center relative text-white">
-                        <span className="font-extrabold tracking-widest text-lg font-sans select-none">
-                          PAYMENT
+                    {/* Official KHQR Ticket Card Container (Matching Image 3) */}
+                    <div className="w-full max-w-[320px] bg-white rounded-[24px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col text-slate-800 animate-in fade-in duration-200">
+                      
+                      {/* Red KHQR Header Banner */}
+                      <div className="bg-[#E51821] py-3.5 px-6 flex items-center justify-between relative text-white rounded-t-[24px]">
+                        <span className="font-black tracking-widest text-xl font-sans select-none drop-shadow-sm">
+                          KHQR
+                        </span>
+                        <span className="text-[10px] font-extrabold tracking-wider bg-white/20 px-2 py-0.5 rounded uppercase font-sans">
+                          BAKONG
                         </span>
                       </div>
 
-                      {/* Total Amount Panel */}
-                      <div className="text-center pt-6 px-6">
-                        <span className="block text-[10px] text-slate-400 font-extrabold tracking-wider uppercase select-none">
-                          Total Amount
+                      {/* Merchant Name & Total Amount */}
+                      <div className="text-center pt-5 px-6 space-y-1">
+                        <span className="block text-xs text-slate-400 font-extrabold tracking-wider uppercase font-sans select-none">
+                          MAO DARA
                         </span>
-                        <span className="block text-slate-800 font-black text-2xl tracking-wide mt-1">
-                          $ {order.price.toFixed(2)}
+                        <span className="block text-slate-900 font-black text-2xl tracking-tight font-sans">
+                          {order.price.toFixed(2)} <span className="text-sm font-bold text-slate-500">USD</span>
                         </span>
+                      </div>
+
+                      {/* Dashed Separator Line */}
+                      <div className="px-6 py-2">
+                        <div className="border-b-2 border-dashed border-slate-200 w-full"></div>
                       </div>
 
                       {/* QR Code Canvas */}
-                      <div className="px-6 py-4 flex justify-center">
-                        <div className="relative p-2.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center shadow-inner">
+                      <div className="px-6 py-2 flex justify-center">
+                        <div className="relative p-3 bg-white rounded-2xl border border-slate-100 flex items-center justify-center shadow-sm">
                           <img 
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(order.paymentQrCode || order.paymentTxnId)}`}
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(order.paymentQrCode || order.paymentTxnId)}`}
                             alt="KHQR Code"
-                            className="w-44 h-44 rounded-lg"
+                            className="w-48 h-48 rounded-lg object-contain"
                           />
                           {/* Floating central black circle with white $ sign */}
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-slate-950 flex items-center justify-center shadow-lg border border-slate-800 select-none font-sans">
-                            <span className="text-[#03c39a] font-extrabold text-sm font-sans">$</span>
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-slate-950 flex items-center justify-center shadow-xl border-2 border-white select-none font-sans">
+                            <span className="text-white font-black text-base font-sans">$</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Scanning Instructions inside card */}
-                      <p className="text-slate-500 text-[10px] px-6 text-center leading-normal mb-5 select-none font-medium font-sans">
-                        Scan with ABA Mobile or any app supporting KHQR to complete payment.
+                      <p className="text-slate-400 text-[11px] px-6 text-center leading-tight py-3 font-medium font-sans border-t border-slate-100 mt-1">
+                        Scan with mobile banking app<br/>that supports KHQR
                       </p>
-
-                      {/* Status indicators — Real-time MD5 check */}
-                      <div className="px-6 pb-6 text-center space-y-2">
-                        <div className="inline-flex items-center space-x-2 bg-emerald-50 border border-emerald-100 text-emerald-700 px-4 py-2 rounded-full text-[11px] font-extrabold select-none shadow-sm mx-auto animate-pulse">
-                          <span className="h-3 w-3 border-2 border-emerald-700 border-t-transparent rounded-full animate-spin"></span>
-                          <span>Waiting for payment...</span>
-                        </div>
-                        {timeLeft !== null && timeLeft > 0 && (
-                          <div className="text-slate-500 font-bold text-xs mt-1.5 font-sans select-none">
-                            Code expires in: <span className="text-red-500 font-black">{formatTime(timeLeft)}</span>
-                          </div>
-                        )}
-                        {/* Live check indicator */}
-                        <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-400 font-medium select-none">
-                          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                          <span>Gateway live check active</span>
-                        </div>
-
-                        {/* Manual Verify Payment Button */}
-                        <div className="pt-2">
-                          <button
-                            id="verify-payment-btn"
-                            onClick={handleManualVerify}
-                            disabled={verifyStatus === 'checking'}
-                            className={`w-full py-2.5 rounded-xl font-extrabold text-xs tracking-wide uppercase transition-all shadow-sm flex items-center justify-center space-x-2 ${
-                              verifyStatus === 'checking'
-                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                : verifyStatus === 'paid'
-                                ? 'bg-emerald-500 text-white'
-                                : verifyStatus === 'not_paid'
-                                ? 'bg-red-500/90 text-white hover:bg-red-600'
-                                : 'bg-[#E51821] text-white hover:bg-[#c01019] active:scale-[0.98]'
-                            }`}
-                          >
-                            {verifyStatus === 'checking' && (
-                              <span className="h-3.5 w-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
-                            )}
-                            {verifyStatus === 'paid' && <CheckCircle2 className="h-3.5 w-3.5" />}
-                            {verifyStatus === 'not_paid' && <XCircle className="h-3.5 w-3.5" />}
-                            <span>
-                              {verifyStatus === 'checking' ? 'Verifying...' :
-                               verifyStatus === 'paid' ? 'Payment Confirmed ✅' :
-                               verifyStatus === 'not_paid' ? 'Not Paid Yet — Try Again' :
-                               'Verify My Payment'}
-                            </span>
-                          </button>
-                          {verifyStatus === 'not_paid' && (
-                            <p className="text-red-400 text-[10px] font-semibold mt-1.5 text-center select-none">
-                              ⚠️ Payment not detected. Please scan and pay first, then tap Verify.
-                            </p>
-                          )}
-                        </div>
-
-                      </div>
-
                     </div>
 
+                    {/* VERIFY MY PAYMENT BUTTON (Matching Image 1) */}
+                    <div className="w-full max-w-[320px] mt-5">
+                      <button
+                        id="verify-payment-btn"
+                        onClick={handleManualVerify}
+                        disabled={verifyStatus === 'checking'}
+                        className={`relative overflow-hidden w-full py-4 px-6 rounded-full font-black text-xs sm:text-sm tracking-widest uppercase transition-all duration-300 shadow-xl flex items-center justify-center space-x-2 border border-red-500/30 ${
+                          verifyStatus === 'checking'
+                            ? 'bg-slate-800 text-slate-400 cursor-not-allowed border-slate-700'
+                            : verifyStatus === 'paid'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40 ring-4 ring-emerald-500/20'
+                            : verifyStatus === 'not_paid'
+                            ? 'bg-red-700 text-white hover:bg-red-600 ring-4 ring-red-500/30'
+                            : 'bg-[#E51821] hover:bg-[#c01019] active:scale-[0.97] text-white ring-4 ring-red-500/20 shadow-red-900/50 hover:shadow-red-600/40'
+                        }`}
+                      >
+                        {/* Shimmer effect */}
+                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent transform -translate-x-full animate-[shimmer_2.5s_infinite]"></span>
+
+                        {verifyStatus === 'checking' && (
+                          <span className="h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                        )}
+                        {verifyStatus === 'paid' && <CheckCircle2 className="h-4 w-4" />}
+                        {verifyStatus === 'not_paid' && <XCircle className="h-4 w-4" />}
+
+                        <span className="relative z-10 font-black tracking-widest drop-shadow-sm">
+                          {verifyStatus === 'checking' ? 'VERIFYING PAYMENT...' :
+                           verifyStatus === 'paid' ? 'PAYMENT CONFIRMED ✅' :
+                           verifyStatus === 'not_paid' ? 'NOT PAID YET — TRY AGAIN' :
+                           'VERIFY MY PAYMENT'}
+                        </span>
+                      </button>
+
+                      {verifyStatus === 'not_paid' && (
+                        <p className="text-red-400 text-[11px] font-semibold mt-2 text-center select-none bg-red-950/40 border border-red-900/50 px-3 py-1.5 rounded-xl">
+                          ⚠️ Payment not detected yet. Please scan and pay with your banking app, then tap VERIFY MY PAYMENT.
+                        </p>
+                      )}
+                    </div>
 
                   </div>
-
                 ) : (
                   /* ABA PAYWAY CARD FLOW */
                   <div className="flex flex-col items-center py-6">
