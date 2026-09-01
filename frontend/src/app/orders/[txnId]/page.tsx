@@ -55,13 +55,26 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
   // Manual verify button handler
   const handleManualVerify = async () => {
-    if (verifyStatus === 'checking') return;
+    if (verifyStatus === 'checking' || !order) return;
     setVerifyStatus('checking');
     try {
-      await fetchStatus(false);
-      setVerifyStatus('idle');
+      const res = await verifyPayment(order.paymentTxnId);
+      if (res && res.verified) {
+        setVerifyStatus('paid');
+        await fetchStatus(false);
+      } else {
+        setVerifyStatus('not_paid');
+        await fetchStatus(false);
+        setTimeout(() => {
+          setVerifyStatus((prev) => (prev === 'not_paid' ? 'idle' : prev));
+        }, 4000);
+      }
     } catch (e) {
-      setVerifyStatus('idle');
+      await fetchStatus(false);
+      setVerifyStatus('not_paid');
+      setTimeout(() => {
+        setVerifyStatus((prev) => (prev === 'not_paid' ? 'idle' : prev));
+      }, 4000);
     }
   };
 
@@ -81,7 +94,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     };
   }, [txnId]);
 
-  // Countdown Timer hook
+  // Countdown Timer hook (15 minutes validity)
   useEffect(() => {
     if (!order || order.status !== 'PENDING') {
       setTimeLeft(null);
@@ -92,7 +105,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       const createdAt = new Date(order.createdAt).getTime();
       const now = Date.now();
       const elapsedSecs = Math.floor((now - createdAt) / 1000);
-      const validitySecs = 180; // 3 minutes validity
+      const validitySecs = 900; // 15 minutes validity
       const remaining = validitySecs - elapsedSecs;
       return remaining > 0 ? remaining : 0;
     };
@@ -294,38 +307,38 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
           <div className="md:col-span-3 space-y-6">
             
             {order.status === 'PENDING' && (
-              <div className="glass-panel p-6 bg-slate-950/40 border-slate-900 text-center">
+              <div className="glass-panel p-6 bg-white border-slate-200 shadow-sm text-center">
                 
                 {isKhqr ? (
                   /* KHQR SCAN FLOW (Bakong / Canadia / ABA) */
                   <div className="flex flex-col items-center">
                     
                     {/* Header Bar: Back Chevron + ABA KHQR Title + Animated Circular Countdown */}
-                    <div className="flex items-center justify-between w-full max-w-[320px] mb-4 text-slate-200">
+                    <div className="flex items-center justify-between w-full max-w-[320px] mb-4 text-slate-800">
                       <div className="flex items-center space-x-2 font-bold text-sm">
-                        <Link href="/" className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-all">
+                        <Link href="/" className="p-1.5 rounded-xl bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 transition-all">
                           <ChevronLeft className="h-4 w-4" />
                         </Link>
-                        <span className="font-extrabold text-base tracking-wide text-white">
+                        <span className="font-extrabold text-base tracking-wide text-slate-900">
                           {order.paymentMethod === 'CANADIA' ? 'CANADIA KHQR' : 'ABA KHQR'}
                         </span>
                       </div>
                       
                       {/* Circular Countdown Timer */}
-                      <div className="flex items-center space-x-2 font-mono text-xs text-slate-300 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full shadow-inner">
+                      <div className="flex items-center space-x-2 font-mono text-xs text-slate-700 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full shadow-inner">
                         <div className="relative w-4 h-4 flex items-center justify-center">
                           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                             <path
-                              className="text-slate-800"
+                              className="text-slate-200"
                               strokeWidth="4"
                               stroke="currentColor"
                               fill="none"
                               d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                             />
                             <path
-                              className="text-cyan-400 transition-all duration-1000 ease-linear"
+                              className="text-cyan-600 transition-all duration-1000 ease-linear"
                               strokeDasharray="100, 100"
-                              strokeDashoffset={100 - ((timeLeft || 0) / 180) * 100}
+                              strokeDashoffset={100 - ((timeLeft || 0) / 900) * 100}
                               strokeWidth="4"
                               strokeLinecap="round"
                               stroke="currentColor"
@@ -334,7 +347,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                             />
                           </svg>
                         </div>
-                        <span className="font-extrabold text-cyan-400">{formatTime(timeLeft || 0)}</span>
+                        <span className="font-extrabold text-cyan-600">{formatTime(timeLeft || 0)}</span>
                       </div>
                     </div>
 
@@ -347,7 +360,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                           KHQR
                         </span>
                         <span className="text-[10px] font-extrabold tracking-wider bg-white/20 px-2 py-0.5 rounded uppercase font-sans">
-                          BAKONG
+                          ABA
                         </span>
                       </div>
 
@@ -385,46 +398,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                       <p className="text-slate-400 text-[11px] px-6 text-center leading-tight py-3 font-medium font-sans border-t border-slate-100 mt-1">
                         Scan with mobile banking app<br/>that supports KHQR
                       </p>
-                    </div>
-
-                    {/* VERIFY MY PAYMENT BUTTON (Matching Image 1) */}
-                    <div className="w-full max-w-[320px] mt-5">
-                      <button
-                        id="verify-payment-btn"
-                        onClick={handleManualVerify}
-                        disabled={verifyStatus === 'checking'}
-                        className={`relative overflow-hidden w-full py-4 px-6 rounded-full font-black text-xs sm:text-sm tracking-widest uppercase transition-all duration-300 shadow-xl flex items-center justify-center space-x-2 border border-red-500/30 ${
-                          verifyStatus === 'checking'
-                            ? 'bg-slate-800 text-slate-400 cursor-not-allowed border-slate-700'
-                            : verifyStatus === 'paid'
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40 ring-4 ring-emerald-500/20'
-                            : verifyStatus === 'not_paid'
-                            ? 'bg-red-700 text-white hover:bg-red-600 ring-4 ring-red-500/30'
-                            : 'bg-[#E51821] hover:bg-[#c01019] active:scale-[0.97] text-white ring-4 ring-red-500/20 shadow-red-900/50 hover:shadow-red-600/40'
-                        }`}
-                      >
-                        {/* Shimmer effect */}
-                        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent transform -translate-x-full animate-[shimmer_2.5s_infinite]"></span>
-
-                        {verifyStatus === 'checking' && (
-                          <span className="h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
-                        )}
-                        {verifyStatus === 'paid' && <CheckCircle2 className="h-4 w-4" />}
-                        {verifyStatus === 'not_paid' && <XCircle className="h-4 w-4" />}
-
-                        <span className="relative z-10 font-black tracking-widest drop-shadow-sm">
-                          {verifyStatus === 'checking' ? 'VERIFYING PAYMENT...' :
-                           verifyStatus === 'paid' ? 'PAYMENT CONFIRMED ✅' :
-                           verifyStatus === 'not_paid' ? 'NOT PAID YET — TRY AGAIN' :
-                           'VERIFY MY PAYMENT'}
-                        </span>
-                      </button>
-
-                      {verifyStatus === 'not_paid' && (
-                        <p className="text-red-400 text-[11px] font-semibold mt-2 text-center select-none bg-red-950/40 border border-red-900/50 px-3 py-1.5 rounded-xl">
-                          ⚠️ Payment not detected yet. Please scan and pay with your banking app, then tap VERIFY MY PAYMENT.
-                        </p>
-                      )}
                     </div>
 
                   </div>
@@ -520,18 +493,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                   </div>
                 )}
                 
-                <div className="pt-4 flex gap-4 justify-center">
+                <div className="pt-4 flex justify-center">
                   <Link
                     href="/"
-                    className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-bold text-xs shadow-md glow-btn"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-bold text-xs shadow-md glow-btn transition-transform hover:scale-105"
                   >
                     {t.buyMoreRecharge}
-                  </Link>
-                  <Link
-                    href="/history"
-                    className="px-5 py-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-bold text-xs"
-                  >
-                    {t.viewPurchaseHistory}
                   </Link>
                 </div>
               </div>
@@ -565,14 +532,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
           {/* Column 2: Order Invoice Details Sidebar */}
           <div className="md:col-span-2 space-y-6">
-            <div className="glass-panel p-6 bg-slate-950/70 border-slate-900 space-y-6">
+            <div className="glass-panel p-6 bg-white border-slate-200 shadow-md space-y-6">
               <div>
-                <h4 className="text-white font-extrabold text-sm border-b border-slate-900 pb-2 mb-3">{t.orderInvoice}</h4>
-                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                  <Clock className="h-4 w-4 text-cyan-400" />
+                <h4 className="text-slate-900 font-extrabold text-sm border-b border-slate-100 pb-2 mb-3">{t.orderInvoice}</h4>
+                <div className="flex items-center space-x-1.5 text-xs text-slate-500">
+                  <Clock className="h-4 w-4 text-cyan-600" />
                   <span>{t.statusLabel}: </span>
                   <span className={`font-bold select-none capitalize ${
-                    (order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') ? 'text-emerald-400' : order.status === 'PENDING' ? 'text-amber-400' : 'text-red-400'
+                    (order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') ? 'text-emerald-600' : order.status === 'PENDING' ? 'text-amber-600' : 'text-red-600'
                   }`}>
                     {order.status}
                   </span>
@@ -581,76 +548,49 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
               {/* Invoice details fields */}
               <div className="space-y-3.5 text-xs">
-                <div className="flex justify-between pb-2 border-b border-slate-900">
+                <div className="flex justify-between pb-2 border-b border-slate-100">
                   <span className="text-slate-500">{t.invoiceReference}:</span>
-                  <code className="text-slate-300 font-mono truncate max-w-[120px]" title={order.paymentTxnId}>
+                  <code className="text-slate-700 font-mono truncate max-w-[120px]" title={order.paymentTxnId}>
                     {order.paymentTxnId}
                   </code>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.selectedProduct}:</span>
-                  <span className="text-white font-bold text-right">{order.gameName}</span>
+                  <span className="text-slate-900 font-bold text-right">{order.gameName}</span>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.packageItem}:</span>
-                  <span className="text-white font-bold text-right">{order.packageName}</span>
+                  <span className="text-slate-900 font-bold text-right">{order.packageName}</span>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.playerId}:</span>
-                  <span className="text-white font-mono font-semibold text-right">{order.playerId}</span>
+                  <span className="text-slate-900 font-mono font-semibold text-right">{order.playerId}</span>
                 </div>
-
-
 
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.paymentGateway}:</span>
-                  <span className="text-white font-bold text-right">{order.paymentMethod}</span>
+                  <span className="text-slate-900 font-bold text-right">{order.paymentMethod}</span>
                 </div>
 
                 <div className="flex justify-between">
                   <span className="text-slate-500">{t.paymentStatusLabel}:</span>
                   <span className={`font-bold text-right uppercase ${
-                    order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS' ? 'text-emerald-400' : order.paymentStatus === 'PENDING' || order.paymentStatus === 'UNPAID' ? 'text-amber-400' : 'text-red-400'
+                    order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS' ? 'text-emerald-600' : order.paymentStatus === 'PENDING' || order.paymentStatus === 'UNPAID' ? 'text-amber-600' : 'text-red-600'
                   }`}>
                     {order.paymentStatus}
                   </span>
                 </div>
 
-                <div className="border-t border-slate-900 pt-3 flex justify-between items-end">
-                  <span className="text-slate-400">{t.totalPrice}:</span>
-                  <span className="text-cyan-400 text-lg font-black">
+                <div className="border-t border-slate-100 pt-3 flex justify-between items-end">
+                  <span className="text-slate-600 font-semibold">{t.totalPrice}:</span>
+                  <span className="text-cyan-600 text-lg font-black">
                     ${order.price.toFixed(2)}
                   </span>
                 </div>
               </div>
-
-              {/* Status information notice */}
-              {order.status === 'PENDING' && (
-                <div className="p-3 bg-slate-900/30 border border-slate-850 rounded-lg text-[10px] text-slate-500 flex items-start space-x-1.5 leading-normal">
-                  <Info className="h-4.5 w-4.5 text-cyan-500 shrink-0 mt-0.5" />
-                  <p>
-                    {t.invoiceNotice}
-                  </p>
-                </div>
-              )}
-
-              {/* 100% Security Trust Badge */}
-              {order.status === 'PENDING' && (
-                <div className="p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-left">
-                  <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-emerald-400">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">សន្តិសុខសុវត្ថិភាព 100% / 100% Secure</h4>
-                    <p className="text-slate-400 text-[10px] leading-tight mt-0.5">
-                      ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ និងការផ្ទៀងផ្ទាត់ការទូទាត់ស្វ័យប្រវត្តិតាមរយៈ Bakong KHQR dynamic check។
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 

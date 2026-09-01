@@ -42,6 +42,26 @@ export async function verifyAbaKhqrPayment(order: any): Promise<boolean> {
     return false;
   }
 
+  // -- 1.5. Direct CutLuy status check --------------------------------------
+  const cutluyApiKey = process.env.CUTLUY_API_KEY || 'ck_live_7TNbEHrfs2CDCc5ze1atGCIM6ISYZQwD';
+  if (order.gatewayRef && !order.gatewayRef.startsWith('MOCK') && !order.gatewayRef.startsWith('rbkn') && cutluyApiKey) {
+    try {
+      const cutluyRes = await fetch(`https://cutluy.com/v1/payments/${order.gatewayRef}`, {
+        headers: { Authorization: `Bearer ${cutluyApiKey}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (cutluyRes.ok) {
+        const cutluyData = await cutluyRes.json() as any;
+        if (cutluyData.status === 'paid' || cutluyData.status === 'approved' || cutluyData.status === 'completed' || cutluyData.status === 'success') {
+          log('Verification', txnId, `✅ CutLuy confirmed payment PAID for ref: ${order.gatewayRef}`);
+          return true;
+        }
+      }
+    } catch (cutluyErr: any) {
+      logErr('Verification', txnId, `CutLuy check error: ${cutluyErr.message || cutluyErr}`);
+    }
+  }
+
   // -- 2. Live gateway check -------------------------------------------------
   const ctx: PaymentVerificationContext = {
     expectedAmount:     order.price,
@@ -183,20 +203,10 @@ export async function processVerifiedPayment(order: any, gatewayRef: string) {
       credentialsLabel = `<b>Player ID:</b> <code>${order.playerId}</code>\n<b>Server/Zone ID:</b> <code>${order.playerZoneId}</code>`;
     }
 
-    await sendTelegramNotification(
-      `🛒 <b>New Order Placed & Verified!</b>\n` +
-      `-----------------------------------------\n` +
-      `<b>ID:</b> <code>${result.updated.id}</code>\n` +
-      `<b>Txn ID:</b> <code>${txnId}</code>\n` +
-      `<b>Game:</b> ${result.updated.package?.product?.name || order.package?.product?.name || 'N/A'}\n` +
-      `<b>Package:</b> ${result.updated.package?.name || order.package?.name || 'N/A'}\n` +
-      `${credentialsLabel}\n` +
-      `<b>Nickname:</b> ${order.playerNickname || 'N/A'}\n` +
-      `<b>Price:</b> $${order.price.toFixed(2)}\n` +
-      `<b>Payment:</b> ${order.paymentMethod} (Verified)\n` +
-      `<b>Delivery:</b> ${deliveryEmoji} ${result.deliveryStatus}\n` +
-      `${deliveryDetail}`
-    );
+    const packageName = result.updated.package?.name || order.package?.name || '';
+    const playerIdFull = order.playerZoneId ? `${order.playerId} (${order.playerZoneId})` : order.playerId;
+
+    await sendTelegramNotification(`${playerIdFull} ${packageName}`.trim());
     log('Telegram', txnId, 'Successfully dispatched Telegram notification alert.');
   } catch (tgErr: any) {
     logErr('Telegram', txnId, `Failed to dispatch Telegram alert: ${tgErr.message}`);
@@ -216,7 +226,7 @@ export async function processVerifiedPayment(order: any, gatewayRef: string) {
  * as EXPIRED / FAILED to prevent delayed auto-fulfillment issues.
  */
 export async function expireOldOrders() {
-  const expiryCutoff = new Date(Date.now() - 15 * 1000); // 15 seconds ago
+  const expiryCutoff = new Date(Date.now() - 15 * 60 * 1000); // 15 minutes ago
 
   try {
     const expiredOrders = await prisma.order.findMany({
@@ -248,7 +258,7 @@ export async function expireOldOrders() {
             deliveryStatus: 'FAILED',
           },
         });
-        log('Sweeper', order.paymentTxnId, 'Order flagged as EXPIRED / CANCELLED (older than 15 seconds).');
+        log('Sweeper', order.paymentTxnId, 'Order flagged as EXPIRED / CANCELLED (older than 15 minutes).');
       }
     }
   } catch (err: any) {

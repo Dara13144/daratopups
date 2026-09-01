@@ -6,19 +6,24 @@ import {
   fetchAdminStats, fetchAdminOrders, updateAdminOrderStatus,
   fetchAdminStock, addAdminStock, fetchProducts, GameProduct,
   addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage,
+  updateAdminProduct, updateAdminPackage,
+  downloadAdminBackup, createAdminSnapshot, fetchAdminSnapshots,
+  restoreAdminBackup, deleteAdminSnapshot,
   serverUrl, API_BASE
 } from '../../lib/api';
 import {
   ShoppingBag, Database, TrendingUp, CheckCircle, Clock, Plus, RefreshCw,
   Search, Trash2, Gem, LogOut, Image as ImageIcon, Upload, Package,
-  ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign
+  ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign,
+  HardDrive, Download, ShieldCheck, History, RotateCcw, FileText, Check,
+  Pencil, Edit, Eye, EyeOff, SlidersHorizontal
 } from 'lucide-react';
 
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'backup'>('metrics');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [metrics, setMetrics] = useState<any>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
@@ -56,6 +61,206 @@ export default function AdminDashboard() {
   const [promptCode, setPromptCode] = useState('');
   const [activePromptOrderId, setActivePromptOrderId] = useState<string | null>(null);
 
+  // Product Editor Modal State
+  const [editingProductModal, setEditingProductModal] = useState<GameProduct | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editProdCategory, setEditProdCategory] = useState('MOBILE_GAME');
+  const [editProdSlug, setEditProdSlug] = useState('');
+  const [editProdImage, setEditProdImage] = useState('');
+  const [editProdIsActive, setEditProdIsActive] = useState(true);
+  const [editProdModalFile, setEditProdModalFile] = useState<File | null>(null);
+  const [editProdModalPreview, setEditProdModalPreview] = useState('');
+  const editProdModalFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Package Editor Modal State
+  const [editingPackageModal, setEditingPackageModal] = useState<{ pkg: any; product: GameProduct } | null>(null);
+  const [editPkgName, setEditPkgName] = useState('');
+  const [editPkgAmount, setEditPkgAmount] = useState('');
+  const [editPkgPrice, setEditPkgPrice] = useState('');
+  const [editPkgCategory, setEditPkgCategory] = useState('NORMAL');
+  const [editPkgBadge, setEditPkgBadge] = useState('');
+  const [editPkgIsActive, setEditPkgIsActive] = useState(true);
+
+  // Product Catalog Search & Filter
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
+
+  const openEditProductModal = (prod: GameProduct) => {
+    setEditingProductModal(prod);
+    setEditProdName(prod.name);
+    setEditProdCategory(prod.category);
+    setEditProdSlug(prod.slug);
+    setEditProdImage(prod.image);
+    setEditProdIsActive(prod.isActive !== false);
+    setEditProdModalFile(null);
+    setEditProdModalPreview('');
+  };
+
+  const handleSaveProductModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProductModal) return;
+    setActionLoading(true); setError(''); setSuccess('');
+    try {
+      let finalImg = editProdImage;
+      if (editProdModalFile) {
+        finalImg = await uploadImageToServer(editProdModalFile);
+      }
+      await updateAdminProduct(editingProductModal.id, {
+        name: editProdName,
+        category: editProdCategory,
+        slug: editProdSlug,
+        image: finalImg,
+        isActive: editProdIsActive,
+      });
+      setSuccess(`Product "${editProdName}" updated successfully!`);
+      setEditingProductModal(null);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update product');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openEditPackageModal = (pkg: any, prod: GameProduct) => {
+    setEditingPackageModal({ pkg, product: prod });
+    setEditPkgName(pkg.name);
+    setEditPkgAmount(String(pkg.amount));
+    setEditPkgPrice(String(pkg.price));
+    setEditPkgCategory(pkg.category || 'NORMAL');
+    setEditPkgBadge(pkg.badge || '');
+    setEditPkgIsActive(pkg.isActive !== false);
+  };
+
+  const handleSavePackageModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPackageModal) return;
+    setActionLoading(true); setError(''); setSuccess('');
+    try {
+      await updateAdminPackage(editingPackageModal.pkg.id, {
+        name: editPkgName,
+        amount: parseInt(editPkgAmount, 10),
+        price: parseFloat(editPkgPrice),
+        category: editPkgCategory,
+        badge: editPkgBadge || '',
+        isActive: editPkgIsActive,
+      });
+      setSuccess(`Package "${editPkgName}" updated successfully!`);
+      setEditingPackageModal(null);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update package');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleProductStatus = async (prod: GameProduct) => {
+    setActionLoading(true);
+    try {
+      const newStatus = prod.isActive === false ? true : false;
+      await updateAdminProduct(prod.id, { isActive: newStatus });
+      setSuccess(`Product "${prod.name}" is now ${newStatus ? 'Active' : 'Disabled'}`);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to toggle product status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Backup & Restore states
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoringSnapshot, setRestoringSnapshot] = useState<string | null>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+  const [backupFileSelected, setBackupFileSelected] = useState<File | null>(null);
+
+  const loadSnapshots = async () => {
+    try {
+      const res = await fetchAdminSnapshots();
+      setSnapshots(res.snapshots || []);
+    } catch (e) {
+      console.error('Failed to load snapshots:', e);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    setBackupLoading(true);
+    try {
+      await downloadAdminBackup();
+      setSuccess('Backup exported and downloaded successfully!');
+    } catch (err: any) {
+      setError(err.message || 'Failed to download backup');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleCreateSnapshot = async () => {
+    setBackupLoading(true);
+    try {
+      const res = await createAdminSnapshot();
+      setSuccess(res.message || 'Snapshot created successfully!');
+      loadSnapshots();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create snapshot');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (filename: string) => {
+    if (!window.confirm(`Are you sure you want to restore the system state from snapshot "${filename}"?`)) return;
+    setRestoringSnapshot(filename);
+    try {
+      const res = await restoreAdminBackup({ filename });
+      setSuccess(res.message || 'System restored successfully!');
+      await loadAllData();
+      await loadSnapshots();
+    } catch (err: any) {
+      setError(err.message || 'Failed to restore snapshot');
+    } finally {
+      setRestoringSnapshot(null);
+    }
+  };
+
+  const handleDeleteSnapshot = async (filename: string) => {
+    if (!window.confirm(`Delete snapshot "${filename}"?`)) return;
+    try {
+      await deleteAdminSnapshot(filename);
+      setSuccess('Snapshot deleted successfully');
+      loadSnapshots();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete snapshot');
+    }
+  };
+
+  const handleUploadBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupFileSelected(file);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (!window.confirm(`Restore database from file "${file.name}"? This will update products and packages.`)) return;
+        setBackupLoading(true);
+        const res = await restoreAdminBackup({ backupPayload: json });
+        setSuccess(res.message || 'Backup file restored successfully!');
+        await loadAllData();
+        await loadSnapshots();
+      } catch (err: any) {
+        setError('Invalid JSON backup file or restore failed: ' + (err.message || ''));
+      } finally {
+        setBackupLoading(false);
+        setBackupFileSelected(null);
+        if (backupFileInputRef.current) backupFileInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const loadAllData = async () => {
     setLoading(true); setError('');
     try {
@@ -64,6 +269,7 @@ export default function AdminDashboard() {
       const ordersRes = await fetchAdminOrders(); setOrders(ordersRes);
       const stockRes = await fetchAdminStock(); setStocks(stockRes.stocks);
       const prodRes = await fetchProducts(); setAllProducts(prodRes);
+      await loadSnapshots();
       if (prodRes.length > 0) {
         setSelectedProductId(prodRes[0].id);
         if (prodRes[0].packages.length > 0) setSelectedPackageId(prodRes[0].packages[0].id);
@@ -216,6 +422,7 @@ export default function AdminDashboard() {
     { id: 'orders', icon: ShoppingBag, label: 'Orders', count: orders.length },
     { id: 'stock', icon: Database, label: 'Voucher Stock', count: stocks.filter((s: any) => !s.isUsed).length },
     { id: 'products', icon: Package, label: 'Products', count: allProducts.length },
+    { id: 'backup', icon: HardDrive, label: 'Backup & Restore', count: snapshots.length || null },
   ] as const;
 
   if (!isAdmin) return null;
@@ -562,97 +769,609 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Catalog */}
+                {/* Catalog Header with Search & Filter */}
                 <div className={`${panelCls} p-5`} style={panelBg}>
-                  <h3 className="text-white font-extrabold text-sm mb-5 flex items-center space-x-2"><Database className="h-4 w-4 text-cyan-400"/><span>Product Catalog ({allProducts.length})</span></h3>
-                  <div className="space-y-5">
-                    {allProducts.map(prod=>(
-                      <div key={prod.id} className="border border-slate-800 rounded-xl overflow-hidden">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4" style={{ background:'rgba(15,23,42,.5)' }}>
-                          {/* Image + hover edit */}
-                          <div className="relative group shrink-0">
-                            <img src={getProductImgSrc(prod.image)} alt={prod.name}
-                              onError={e=>{(e.target as HTMLImageElement).src='https://placehold.co/48x48/1e293b/94a3b8?text=IMG';}}
-                              className="w-12 h-12 rounded-xl object-cover border border-slate-800 shadow-md"/>
-                            <button onClick={()=>{setEditingProductId(prod.id===editingProductId?null:prod.id);setEditImageFile(null);setEditImagePreview('');}}
-                              title="Change image" className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-slate-700 border border-slate-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
-                              <ImageIcon className="h-2.5 w-2.5"/>
-                            </button>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="text-white font-black text-sm">{prod.name}</h4>
-                              <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded" style={{ background:'rgba(6,182,212,.1)', border:'1px solid rgba(6,182,212,.2)', color:'#06b6d4' }}>{prod.category}</span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-0.5 font-mono">/{prod.slug}</p>
-                          </div>
-                          <button onClick={()=>handleDeleteProduct(prod.id)} disabled={actionLoading}
-                            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all shrink-0"
-                            style={{ background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.2)', color:'#f87171' }}>
-                            <Trash2 className="h-3 w-3"/><span>Delete</span>
-                          </button>
-                        </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+                    <div>
+                      <h3 className="text-white font-extrabold text-sm flex items-center space-x-2">
+                        <Database className="h-4 w-4 text-cyan-400" />
+                        <span>Product Catalog Editor ({allProducts.length} Games)</span>
+                      </h3>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        Edit titles, packages, prices, cover artworks, or toggle availability.
+                      </p>
+                    </div>
 
-                        {/* Inline image editor */}
-                        {editingProductId===prod.id&&(
-                          <div className="border-t border-slate-800 p-4" style={{ background:'rgba(6,182,212,.02)' }}>
-                            <p className="text-xs text-slate-400 font-semibold mb-3 flex items-center space-x-1.5">
-                              <ImageIcon className="h-3.5 w-3.5 text-cyan-400"/><span>Update image for <span className="text-white">{prod.name}</span></span>
-                            </p>
-                            <div
-                              onDragOver={e=>{e.preventDefault();setEditIsDragging(true);}}
-                              onDragLeave={()=>setEditIsDragging(false)}
-                              onDrop={e=>{e.preventDefault();setEditIsDragging(false);const f=e.dataTransfer.files[0];if(f)handleEditImageFileDrop(f);}}
-                              onClick={()=>editFileInputRef.current?.click()}
-                              className="cursor-pointer rounded-xl flex flex-col items-center justify-center p-4 text-center mb-3 transition-all"
-                              style={{ border:`2px dashed ${editIsDragging?'#06b6d4':'#334155'}`, background:editIsDragging?'rgba(6,182,212,.06)':'rgba(15,23,42,.4)' }}>
-                              <input ref={editFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleEditImageFileDrop(f);}}/>
-                              {editImagePreview?(
-                                <div className="flex items-center space-x-3">
-                                  <img src={editImagePreview} alt="Preview" className="h-14 w-14 rounded-xl object-cover shadow"/>
-                                  <div className="text-left"><p className="text-white text-xs font-bold">{editImageFile?.name}</p><p className="text-slate-400 text-[10px]">Ready to upload</p></div>
+                    {/* Search and Category Filters */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                        <input
+                          type="text"
+                          placeholder="Search game..."
+                          value={productSearchQuery}
+                          onChange={e => setProductSearchQuery(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs w-44"
+                        />
+                      </div>
+                      <select
+                        value={productCategoryFilter}
+                        onChange={e => setProductCategoryFilter(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-lg text-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                      >
+                        <option value="ALL">All Categories</option>
+                        <option value="MOBILE_GAME">Mobile Games</option>
+                        <option value="PC_GAME">PC Games</option>
+                        <option value="VOUCHER">Vouchers</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Catalog List */}
+                  {(() => {
+                    const filteredCatalog = allProducts.filter(p => {
+                      const matchesSearch = !productSearchQuery || p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) || p.slug.toLowerCase().includes(productSearchQuery.toLowerCase());
+                      const matchesCat = productCategoryFilter === 'ALL' || p.category === productCategoryFilter;
+                      return matchesSearch && matchesCat;
+                    });
+
+                    return (
+                      <div className="space-y-4">
+                        {filteredCatalog.map(prod => (
+                          <div key={prod.id} className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
+                            {/* Product Header Bar */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-slate-800/80 bg-slate-950/40">
+                              <div className="flex items-center space-x-3 min-w-0">
+                                <img
+                                  src={getProductImgSrc(prod.image)}
+                                  alt={prod.name}
+                                  onError={e => { (e.target as HTMLImageElement).src = 'https://placehold.co/48x48/1e293b/94a3b8?text=IMG'; }}
+                                  className="w-12 h-12 rounded-xl object-cover border border-slate-800 shadow-sm shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center space-x-2 flex-wrap">
+                                    <h4 className="text-white font-black text-sm truncate">{prod.name}</h4>
+                                    <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                                      {prod.category}
+                                    </span>
+                                    {prod.isActive === false ? (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+                                        Disabled
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                        Active
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">/{prod.slug}</p>
                                 </div>
-                              ):(
-                                <><Upload className="h-5 w-5 text-slate-500 mb-1"/><p className="text-slate-400 text-[11px] font-semibold">Drag & drop or click</p></>
+                              </div>
+
+                              {/* Action Buttons for Game */}
+                              <div className="flex items-center space-x-2 shrink-0">
+                                <button
+                                  onClick={() => handleToggleProductStatus(prod)}
+                                  disabled={actionLoading}
+                                  className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    prod.isActive === false
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20'
+                                  }`}
+                                  title={prod.isActive === false ? 'Enable Product' : 'Disable Product'}
+                                >
+                                  {prod.isActive === false ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                  <span>{prod.isActive === false ? 'Enable' : 'Disable'}</span>
+                                </button>
+
+                                <button
+                                  onClick={() => openEditProductModal(prod)}
+                                  className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                  <span>Edit Game</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleDeleteProduct(prod.id)}
+                                  disabled={actionLoading}
+                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+                                  title="Delete Product"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Packages Section */}
+                            <div className="p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h5 className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+                                  <Gem className="h-3 w-3 text-cyan-400" />
+                                  <span>Recharge Packages ({prod.packages?.length || 0})</span>
+                                </h5>
+                              </div>
+
+                              {(!prod.packages || prod.packages.length === 0) ? (
+                                <p className="text-slate-600 text-xs italic">No packages assigned to this game yet.</p>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                                  {prod.packages.map(pkg => (
+                                    <div
+                                      key={pkg.id}
+                                      className="group relative border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition-all bg-slate-950/60 flex flex-col justify-between"
+                                    >
+                                      <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                          <span className="text-white font-bold text-xs truncate pr-2">{pkg.name}</span>
+                                        </div>
+                                        <div className="text-cyan-400 font-black text-sm">${pkg.price.toFixed(2)}</div>
+                                        <div className="text-[9px] text-slate-400 mt-0.5">Amount: {pkg.amount}</div>
+                                        {pkg.badge && (
+                                          <div className="mt-1 text-[9px] text-amber-400 font-bold truncate">🏷️ {pkg.badge}</div>
+                                        )}
+                                        {pkg.category === 'BEST_SELLER' && (
+                                          <div className="text-[9px] text-violet-400 font-bold">★ Best Seller</div>
+                                        )}
+                                      </div>
+
+                                      {/* Package Actions Bar */}
+                                      <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-end space-x-1.5">
+                                        <button
+                                          onClick={() => openEditPackageModal(pkg, prod)}
+                                          className="p-1 rounded bg-slate-800 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 transition-all"
+                                          title="Edit Package"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeletePackage(pkg.id)}
+                                          disabled={actionLoading}
+                                          className="p-1 rounded bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all"
+                                          title="Delete Package"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <button onClick={()=>handleUpdateProductImage(prod.id)} disabled={!editImageFile||actionLoading||uploadingImage}
-                                className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40"
-                                style={{ background:'rgba(6,182,212,.15)', border:'1px solid rgba(6,182,212,.3)', color:'#06b6d4' }}>
-                                {uploadingImage?<><div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin"/><span>Uploading...</span></>:<><Upload className="h-3 w-3"/><span>Save Image</span></>}
-                              </button>
-                              <button onClick={()=>{setEditingProductId(null);setEditImageFile(null);setEditImagePreview('');}} className="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-400 text-xs font-bold hover:text-white">Cancel</button>
-                            </div>
+                          </div>
+                        ))}
+
+                        {filteredCatalog.length === 0 && (
+                          <div className="text-center py-12 text-slate-500 text-xs">
+                            No games match your search &quot;{productSearchQuery}&quot;.
                           </div>
                         )}
-
-                        {/* Packages grid */}
-                        <div className="p-4 border-t border-slate-800">
-                          <h5 className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-3">Diamond Packages ({prod.packages.length})</h5>
-                          {prod.packages.length===0?<p className="text-slate-600 text-xs italic">No packages yet.</p>:(
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                              {prod.packages.map(pkg=>(
-                                <div key={pkg.id} className="group relative border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition-all" style={{ background:'rgba(15,23,42,.5)' }}>
-                                  <div className="flex items-center space-x-1.5 mb-2"><Gem className="h-3 w-3 text-cyan-400 shrink-0"/><span className="text-white font-bold text-xs truncate">{pkg.name}</span></div>
-                                  <div className="text-cyan-400 font-black text-sm">${pkg.price.toFixed(2)}</div>
-                                  <div className="text-[9px] text-slate-500 mt-0.5">×{pkg.amount}</div>
-                                  {pkg.badge&&<div className="mt-1 text-[9px] text-amber-400 font-bold truncate">{pkg.badge}</div>}
-                                  {pkg.category==='BEST_SELLER'&&<div className="text-[9px] text-violet-400 font-bold">★ Best Seller</div>}
-                                  <button onClick={()=>handleDeletePackage(pkg.id)} disabled={actionLoading} title="Delete"
-                                    className="absolute top-1.5 right-1.5 p-1 rounded opacity-0 group-hover:opacity-100 transition-all"
-                                    style={{ background:'rgba(239,68,68,.1)', color:'#f87171' }}>
-                                    <Trash2 className="h-2.5 w-2.5"/>
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
                       </div>
-                    ))}
-                    {!allProducts.length&&<div className="text-center py-12 text-slate-600 text-xs">No products yet.</div>}
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ══ MODAL 1: PRODUCT EDITOR ════════════════════════════════ */}
+            {editingProductModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl relative p-6 text-slate-200 animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <Pencil className="h-4 w-4 text-cyan-400" />
+                      <span>Edit Product: {editingProductModal.name}</span>
+                    </h3>
+                    <button
+                      onClick={() => setEditingProductModal(null)}
+                      className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
+
+                  <form onSubmit={handleSaveProductModal} className="space-y-4">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Product Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={editProdName}
+                        onChange={e => setEditProdName(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Category</label>
+                        <select
+                          value={editProdCategory}
+                          onChange={e => setEditProdCategory(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs"
+                        >
+                          <option value="MOBILE_GAME">Mobile Game</option>
+                          <option value="PC_GAME">PC Game</option>
+                          <option value="VOUCHER">Voucher</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">URL Slug</label>
+                        <input
+                          type="text"
+                          required
+                          value={editProdSlug}
+                          onChange={e => setEditProdSlug(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Image Edit & Drag Drop */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Cover Image</label>
+                      <div
+                        onClick={() => editProdModalFileInputRef.current?.click()}
+                        className="cursor-pointer rounded-xl flex items-center justify-between p-3 border border-dashed border-slate-700 bg-slate-950/60 hover:border-cyan-500 transition-all mb-2"
+                      >
+                        <input
+                          ref={editProdModalFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setEditProdModalFile(f);
+                              setEditProdModalPreview(URL.createObjectURL(f));
+                            }
+                          }}
+                        />
+                        <div className="flex items-center space-x-3">
+                          <img
+                            src={editProdModalPreview || getProductImgSrc(editProdImage)}
+                            alt="Preview"
+                            className="h-10 w-10 rounded-lg object-cover"
+                          />
+                          <div>
+                            <p className="text-xs font-bold text-white">
+                              {editProdModalFile ? editProdModalFile.name : 'Click to choose new image file'}
+                            </p>
+                            <p className="text-[10px] text-slate-500">PNG, JPG, WebP supported</p>
+                          </div>
+                        </div>
+                        <Upload className="h-4 w-4 text-cyan-400 mr-2" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Or image path (e.g. /images/games/mygame.png)"
+                        value={editProdImage}
+                        onChange={e => setEditProdImage(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    {/* Active Status Toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <div>
+                        <p className="text-xs font-bold text-white">Product Active Status</p>
+                        <p className="text-[10px] text-slate-400">Controls visibility in customer catalog</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditProdIsActive(!editProdIsActive)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          editProdIsActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-red-500/20 text-red-400 border border-red-500/40'
+                        }`}
+                      >
+                        {editProdIsActive ? 'Active (Visible)' : 'Disabled (Hidden)'}
+                      </button>
+                    </div>
+
+                    {/* Submit Actions */}
+                    <div className="pt-3 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditingProductModal(null)}
+                        className="w-1/2 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={actionLoading}
+                        className="w-1/2 py-2.5 rounded-xl text-white font-bold text-xs shadow-lg"
+                        style={btnGrad}
+                      >
+                        {actionLoading ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ══ MODAL 2: PACKAGE EDITOR ════════════════════════════════ */}
+            {editingPackageModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl relative p-6 text-slate-200 animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <Gem className="h-4 w-4 text-cyan-400" />
+                      <span>Edit Package ({editingPackageModal.product.name})</span>
+                    </h3>
+                    <button
+                      onClick={() => setEditingPackageModal(null)}
+                      className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSavePackageModal} className="space-y-4">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={editPkgName}
+                        onChange={e => setEditPkgName(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Amount (Units)</label>
+                        <input
+                          type="number"
+                          required
+                          value={editPkgAmount}
+                          onChange={e => setEditPkgAmount(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Price (USD)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          required
+                          value={editPkgPrice}
+                          onChange={e => setEditPkgPrice(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Tier Category</label>
+                        <select
+                          value={editPkgCategory}
+                          onChange={e => setEditPkgCategory(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs"
+                        >
+                          <option value="NORMAL">Normal</option>
+                          <option value="BEST_SELLER">Best Seller</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Badge Label</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. HOT, VIP"
+                          value={editPkgBadge}
+                          onChange={e => setEditPkgBadge(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Active Status Toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <div>
+                        <p className="text-xs font-bold text-white">Package Status</p>
+                        <p className="text-[10px] text-slate-400">Enable or disable this specific package</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditPkgIsActive(!editPkgIsActive)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          editPkgIsActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-red-500/20 text-red-400 border border-red-500/40'
+                        }`}
+                      >
+                        {editPkgIsActive ? 'Active' : 'Disabled'}
+                      </button>
+                    </div>
+
+                    {/* Submit Actions */}
+                    <div className="pt-3 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditingPackageModal(null)}
+                        className="w-1/2 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={actionLoading}
+                        className="w-1/2 py-2.5 rounded-xl text-white font-bold text-xs shadow-lg"
+                        style={btnGrad}
+                      >
+                        {actionLoading ? 'Saving...' : 'Save Package'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ══ TAB 5: BACKUP & RESTORE ════════════════════════════════ */}
+            {activeTab === 'backup' && (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-white flex items-center gap-2">
+                      <HardDrive className="h-6 w-6 text-cyan-400" />
+                      <span>Database Backup & Restore System</span>
+                    </h2>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Export full system snapshots, download offline data dumps, and safely restore game catalogs and orders.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDownloadBackup}
+                      disabled={backupLoading}
+                      className="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold text-xs text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                      style={btnGrad}
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>{backupLoading ? 'Exporting...' : 'Export Backup (.json)'}</span>
+                    </button>
+                    <button
+                      onClick={handleCreateSnapshot}
+                      disabled={backupLoading}
+                      className="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4 text-cyan-400" />
+                      <span>Create Server Snapshot</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* System Health / Summary Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className={`${panelCls} p-4`} style={panelBg}>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Games</div>
+                    <div className="text-xl font-black text-white mt-1">{allProducts.length}</div>
+                    <div className="text-[10px] text-cyan-400 mt-0.5">Active in catalog</div>
+                  </div>
+                  <div className={`${panelCls} p-4`} style={panelBg}>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Packages</div>
+                    <div className="text-xl font-black text-white mt-1">
+                      {allProducts.reduce((acc, p) => acc + (p.packages?.length || 0), 0)}
+                    </div>
+                    <div className="text-[10px] text-emerald-400 mt-0.5">Top-up bundles</div>
+                  </div>
+                  <div className={`${panelCls} p-4`} style={panelBg}>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Orders Logged</div>
+                    <div className="text-xl font-black text-white mt-1">{orders.length}</div>
+                    <div className="text-[10px] text-amber-400 mt-0.5">Transactions</div>
+                  </div>
+                  <div className={`${panelCls} p-4`} style={panelBg}>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Server Snapshots</div>
+                    <div className="text-xl font-black text-white mt-1">{snapshots.length}</div>
+                    <div className="text-[10px] text-violet-400 mt-0.5">Restore points ready</div>
+                  </div>
+                </div>
+
+                {/* Restore From Local File Card */}
+                <div className={`${panelCls} p-6`} style={panelBg}>
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2 mb-2">
+                    <Upload className="h-4 w-4 text-cyan-400" />
+                    <span>Upload & Restore Backup File</span>
+                  </h3>
+                  <p className="text-slate-400 text-xs mb-4">
+                    Restore games, package configurations, and orders from a previously downloaded <code className="text-cyan-400 font-mono">.json</code> backup file.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <input
+                      ref={backupFileInputRef}
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={handleUploadBackupFile}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => backupFileInputRef.current?.click()}
+                      disabled={backupLoading}
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl border border-dashed border-cyan-500/50 bg-cyan-500/5 hover:bg-cyan-500/10 text-cyan-300 font-bold text-xs flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                    >
+                      <FileText className="h-4 w-4" />
+                      <span>{backupLoading ? 'Restoring...' : 'Select Backup JSON File to Restore'}</span>
+                    </button>
+                    <span className="text-[11px] text-slate-500">
+                      * Automatic transactional upsert prevents duplicate entries and keeps system stable.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Saved Server Snapshots Table */}
+                <div className={`${panelCls} overflow-hidden`} style={panelBg}>
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <History className="h-4 w-4 text-cyan-400" />
+                      <span>Available Server Snapshots ({snapshots.length})</span>
+                    </h3>
+                    <button
+                      onClick={loadSnapshots}
+                      className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      title="Refresh Snapshots"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {snapshots.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 text-xs">
+                      <HardDrive className="h-8 w-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                      <p>No snapshots found on the server yet.</p>
+                      <p className="text-[10px] text-slate-600 mt-1">Click &quot;Create Server Snapshot&quot; above to create one.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-800/60">
+                      {snapshots.map((snap: any) => (
+                        <div key={snap.filename} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-mono text-xs font-bold text-white truncate">{snap.filename}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold">
+                                {(snap.size / 1024).toFixed(1)} KB
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap">
+                              <span>📅 {new Date(snap.createdAt).toLocaleString()}</span>
+                              {snap.counts && (
+                                <>
+                                  <span className="text-cyan-400 font-semibold">• {snap.counts.products || 0} Games</span>
+                                  <span className="text-emerald-400 font-semibold">• {snap.counts.packages || 0} Packages</span>
+                                  <span className="text-amber-400 font-semibold">• {snap.counts.orders || 0} Orders</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <button
+                              onClick={() => handleRestoreSnapshot(snap.filename)}
+                              disabled={restoringSnapshot === snap.filename || backupLoading}
+                              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              {restoringSnapshot === snap.filename ? (
+                                <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3 w-3" />
+                              )}
+                              <span>{restoringSnapshot === snap.filename ? 'Restoring...' : 'Restore'}</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSnapshot(snap.filename)}
+                              disabled={backupLoading}
+                              className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+                              title="Delete snapshot"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

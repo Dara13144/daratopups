@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #030712; /* Deep Black-Gray */
-  --foreground: #f3f4f6; /* Off white */
+  --background: #ffffff; /* Clean White */
+  --foreground: #0f172a; /* Slate 900 */
   --primary: #06b6d4;    /* Cyan */
   --accent: #8b5cf6;     /* Violet */
-  --card-bg: rgba(17, 24, 39, 0.7);
-  --border-color: rgba(255, 255, 255, 0.08);
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(226, 232, 240, 0.9);
 }
 
 body {
@@ -14,8 +14,8 @@ body {
   color: var(--foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   background-image: 
-    radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+    radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.04) 0px, transparent 50%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -93,5 +93,43 @@ body {
   100% {
     transform: translateX(100%);
   }
+}
+
+/* Continuous Game Banner Marquee */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes marquee-scroll-reverse {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 42s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll-reverse 42s linear infinite;
+  will-change: transform;
+}
+
+.marquee-container:hover .animate-marquee-left,
+.marquee-container:hover .animate-marquee-right {
+  animation-play-state: paused;
 }
 

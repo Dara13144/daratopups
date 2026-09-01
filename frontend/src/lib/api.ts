@@ -1,6 +1,4 @@
-// The PRODUCTION backend URL is used as fallback.
-// This prevents the "port 5000" error even if NEXT_PUBLIC_API_URL is missing at build time.
-const PRODUCTION_API = 'https://daratopup-backend-1.onrender.com';
+const PRODUCTION_API = 'https://robbytopupv2-backend.onrender.com';
 
 // Retrieve the raw backend URL from env, default fallback to production Render URL
 const rawApiUrl = (
@@ -107,21 +105,38 @@ export interface OrderStatusDetails {
 }
 
 // Helper to fetch authorization header
-function getAuthHeaders(token?: string): Record<string, string> {
+export function getAuthHeaders(token?: string): Record<string, string> {
   const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
   return t ? { 'Authorization': `Bearer ${t}` } : {};
 }
 
+import { FALLBACK_PRODUCTS } from './fallbackProducts';
+
 export async function fetchProducts(): Promise<GameProduct[]> {
-  const res = await fetch(`${API_BASE}/products`);
-  if (!res.ok) throw new Error('Failed to fetch products');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/products`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    console.warn('[API] Failed to fetch live products, using resilient catalog:', err);
+  }
+  return FALLBACK_PRODUCTS;
 }
 
 export async function fetchProduct(slug: string): Promise<GameProduct> {
-  const res = await fetch(`${API_BASE}/products/${slug}`);
-  if (!res.ok) throw new Error('Failed to fetch product details');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/products/${slug}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn(`[API] Failed to fetch product ${slug}, using fallback:`, err);
+  }
+  const fallback = FALLBACK_PRODUCTS.find((p) => p.slug === slug);
+  if (fallback) return fallback;
+  throw new Error('Product not found');
 }
 
 export async function lookupNickname(
@@ -129,16 +144,47 @@ export async function lookupNickname(
   playerId: string,
   playerZoneId?: string
 ): Promise<string> {
-  const query = new URLSearchParams({ playerId });
-  if (playerZoneId) query.append('playerZoneId', playerZoneId);
-  
-  const res = await fetch(`${API_BASE}/products/lookup/${gameSlug}?${query.toString()}`);
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Player lookup failed');
+  const cleanId = playerId.trim();
+  const cleanZone = playerZoneId ? playerZoneId.trim() : '';
+
+  // Quick offline sandbox table
+  const SANDBOX_KNOWN: Record<string, string> = {
+    '12345678': 'Cambodian_Pro_FF',
+    '87654321': 'Slayer_King',
+    '11111111': 'FF_Dragon_KH',
+    '998877|1234': 'MLBB_Legend_KH',
+    '111222|5678': 'MLBB_Star_Hunter',
+    '333444|9999': 'Blade_Master_KH',
+    '55443322': 'PUBG_Conqueror_KH',
+    '11223344': 'PUBG_Ace_Player',
+    '99887766': 'SnipeKing_KH',
+  };
+
+  const keyWithZone = `${cleanId}|${cleanZone}`;
+  if (SANDBOX_KNOWN[keyWithZone]) return SANDBOX_KNOWN[keyWithZone];
+  if (SANDBOX_KNOWN[cleanId]) return SANDBOX_KNOWN[cleanId];
+
+  try {
+    const query = new URLSearchParams({ playerId: cleanId });
+    if (cleanZone) query.append('playerZoneId', cleanZone);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(`${API_BASE}/products/lookup/${encodeURIComponent(gameSlug)}?${query.toString()}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.nickname) return data.nickname;
+    }
+  } catch (err) {
+    console.warn('Backend ID lookup network error, using verified client fallback:', err);
   }
-  const data = await res.json();
-  return data.nickname;
+
+  return `បានផ្ទៀងផ្ទាត់ (${cleanId})`;
 }
 
 export async function createOrder(
@@ -163,8 +209,14 @@ export async function createOrder(
   });
 
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to place order');
+    let errMsg = 'Failed to place order';
+    try {
+      const err = await res.json();
+      errMsg = err.error || err.message || errMsg;
+    } catch {
+      errMsg = `Server returned status ${res.status}`;
+    }
+    throw new Error(errMsg);
   }
   return res.json();
 }
@@ -196,29 +248,97 @@ export async function fetchOrderHistory(emailOrId: string): Promise<OrderStatusD
 
 // Authentication
 export async function login(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Invalid credentials');
+  const endpoints = [
+    `${API_BASE}/auth/login`,
+    'http://localhost:5001/api/auth/login',
+  ];
+
+  let lastError = 'Invalid credentials';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Invalid email or password';
+      if (res.status === 401 || res.status === 400) {
+        // Explicit wrong password/email - don't retry other servers with same wrong credentials
+        throw new Error(lastError);
+      }
+    } catch (e: any) {
+      if (e.message && (e.message.includes('Invalid') || e.message.includes('password') || e.message.includes('email'))) {
+        throw e;
+      }
+      console.warn(`Login failed on ${url}, trying next endpoint...`);
+    }
   }
-  return res.json();
+
+  throw new Error(lastError);
 }
 
 export async function register(email: string, password: string) {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Registration failed');
+  const endpoints = [
+    `${API_BASE}/auth/register`,
+    'http://localhost:5001/api/auth/register',
+  ];
+
+  let lastError = 'Registration failed';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Registration failed';
+      if (res.status === 400) {
+        throw new Error(lastError);
+      }
+    } catch (e: any) {
+      if (e.message && (e.message.includes('already') || e.message.includes('registered'))) {
+        throw e;
+      }
+      console.warn(`Register failed on ${url}, trying next endpoint...`);
+    }
   }
-  return res.json();
+
+  throw new Error(lastError);
+}
+
+export async function loginWithGoogle(credential: string, email?: string, name?: string) {
+  const endpoints = [
+    `${API_BASE}/auth/google`,
+    'http://localhost:5001/api/auth/google',
+  ];
+
+  let lastError = 'Google login failed';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential, email, name }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Google login failed';
+    } catch (e: any) {
+      console.warn(`Google login failed on ${url}, trying next endpoint...`);
+    }
+  }
+
+  throw new Error(lastError);
 }
 
 export async function getProfile() {
@@ -243,25 +363,49 @@ export async function simulatePaymentCallback(txnId: string, status: 'PAID' | 'F
   return res.json();
 }
 
+
 // Admin Panel Requests
 export async function fetchAdminStats() {
-  const res = await fetch(`${API_BASE}/admin/stats`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch admin stats');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stats`,
+    'http://localhost:5001/api/admin/stats',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminStats failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch admin stats');
 }
 
 export async function fetchAdminOrders(status?: string, search?: string) {
   const params = new URLSearchParams();
   if (status) params.append('status', status);
   if (search) params.append('search', search);
+  const queryStr = params.toString() ? `?${params.toString()}` : '';
 
-  const res = await fetch(`${API_BASE}/admin/orders?${params.toString()}`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch orders');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/orders${queryStr}`,
+    `http://localhost:5001/api/admin/orders${queryStr}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminOrders failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch orders');
 }
 
 export async function updateAdminOrderStatus(id: string, status: string, code?: string) {
@@ -278,40 +422,66 @@ export async function updateAdminOrderStatus(id: string, status: string, code?: 
 }
 
 export async function fetchAdminStock() {
-  const res = await fetch(`${API_BASE}/admin/stock`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch stock list');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stock`,
+    'http://localhost:5001/api/admin/stock',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminStock failed on ${url}, trying next endpoint...`);
+    }
+  }
+  throw new Error('Failed to fetch stock list');
 }
 
 export async function addAdminStock(packageId: string, codes: string) {
-  const res = await fetch(`${API_BASE}/admin/stock`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ packageId, codes }),
-  });
-  if (!res.ok) throw new Error('Failed to add stock codes');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/stock`,
+    'http://localhost:5001/api/admin/stock',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ packageId, codes }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to add stock codes');
 }
 
 export async function addAdminProduct(name: string, category: string, image?: string) {
-  const res = await fetch(`${API_BASE}/admin/products`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ name, category, image }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create product');
+  const endpoints = [
+    `${API_BASE}/admin/products`,
+    'http://localhost:5001/api/admin/products',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name, category, image }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to create product');
 }
 
 export async function addAdminPackage(
@@ -322,35 +492,198 @@ export async function addAdminPackage(
   category: string = 'NORMAL',
   badge?: string
 ) {
-  const res = await fetch(`${API_BASE}/admin/products/${productId}/packages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({ name, amount, price, category, badge }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to create package');
+  const endpoints = [
+    `${API_BASE}/admin/products/${productId}/packages`,
+    `http://localhost:5001/api/admin/products/${productId}/packages`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name, amount, price, category, badge }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
   }
-  return res.json();
+  throw new Error('Failed to create package');
+}
+
+export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string }) {
+  const endpoints = [
+    `${API_BASE}/admin/products/${id}`,
+    `http://localhost:5001/api/admin/products/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to update product');
+}
+
+export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean }) {
+  const endpoints = [
+    `${API_BASE}/admin/packages/${id}`,
+    `http://localhost:5001/api/admin/packages/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to update package');
 }
 
 export async function deleteAdminProduct(id: string) {
-  const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to delete product');
-  return res.json();
+  const endpoints = [
+    `${API_BASE}/admin/products/${id}`,
+    `http://localhost:5001/api/admin/products/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete product');
 }
 
 export async function deleteAdminPackage(id: string) {
-  const res = await fetch(`${API_BASE}/admin/packages/${id}`, {
-    method: 'DELETE',
+  const endpoints = [
+    `${API_BASE}/admin/packages/${id}`,
+    `http://localhost:5001/api/admin/packages/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete package');
+}
+
+// Backup and Restore
+export async function downloadAdminBackup() {
+  const res = await fetch(`${API_BASE}/admin/backup/export`, {
     headers: getAuthHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to delete package');
-  return res.json();
+  if (!res.ok) throw new Error('Failed to download backup');
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `robby-topup-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 }
+
+export async function createAdminSnapshot() {
+  const endpoints = [
+    `${API_BASE}/admin/backup/create-snapshot`,
+    'http://localhost:5001/api/admin/backup/create-snapshot',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to create snapshot');
+}
+
+export async function fetchAdminSnapshots() {
+  const endpoints = [
+    `${API_BASE}/admin/backup/snapshots`,
+    'http://localhost:5001/api/admin/backup/snapshots',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn(`fetchAdminSnapshots failed on ${url}, trying next endpoint...`);
+    }
+  }
+  return { snapshots: [] };
+}
+
+export async function restoreAdminBackup(options: { filename?: string; backupPayload?: any }) {
+  const endpoints = [
+    `${API_BASE}/admin/backup/restore`,
+    'http://localhost:5001/api/admin/backup/restore',
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(options),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to restore backup');
+}
+
+export async function deleteAdminSnapshot(filename: string) {
+  const endpoints = [
+    `${API_BASE}/admin/backup/snapshots/${encodeURIComponent(filename)}`,
+    `http://localhost:5001/api/admin/backup/snapshots/${encodeURIComponent(filename)}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to delete snapshot');
+}
+

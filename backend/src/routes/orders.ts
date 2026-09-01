@@ -155,19 +155,8 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       credentialsLabel = `<b>Player ID:</b> <code>${playerId}</code>\n<b>Server/Zone ID:</b> <code>${playerZoneId}</code>`;
     }
 
-    const telegramMessage = 
-      `🛒 <b>New Order Placed!</b>\n` +
-      `-----------------------------------------\n` +
-      `<b>ID:</b> <code>${order.id}</code>\n` +
-      `<b>Txn ID:</b> <code>${paymentTxnId}</code>\n` +
-      `<b>Game:</b> ${pkg.product.name}\n` +
-      `<b>Package:</b> ${pkg.name}\n` +
-      `${credentialsLabel}\n` +
-      `<b>Nickname:</b> ${nickname}\n` +
-      `<b>Price:</b> $${pkg.price.toFixed(2)}\n` +
-      `<b>Payment:</b> ${paymentMethod}\n` +
-      `<b>Status:</b> PENDING`;
-    
+    const playerIdFull = playerZoneId ? `${playerId} (${playerZoneId})` : playerId;
+    const telegramMessage = `${playerIdFull} ${pkg.name}`.trim();
     await sendTelegramNotification(telegramMessage);
 
     return res.status(201).json({
@@ -182,9 +171,9 @@ router.post('/', async (req: AuthenticatedRequest, res: Response) => {
       },
       paymentDetails,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Order creation error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
@@ -292,9 +281,9 @@ router.post('/verify/:txnId', async (req, res) => {
       return res.status(410).json({ verified: false, error: 'Order has expired. Please create a new order.' });
     }
 
-    // Expire orders older than 15 seconds
+    // Expire orders older than 15 minutes
     const orderAgeMs = Date.now() - new Date(order.createdAt).getTime();
-    if (orderAgeMs > 15 * 1000) {
+    if (orderAgeMs > 15 * 60 * 1000) {
       await prisma.order.update({
         where: { id: order.id },
         data: { paymentStatus: 'EXPIRED', status: 'CANCELLED', deliveryStatus: 'FAILED' },

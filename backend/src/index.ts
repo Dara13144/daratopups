@@ -128,6 +128,8 @@ app.use('/api/payment', paymentsRouter);
 app.use('/api/webhook', webhookRouter);
 app.use('/api/payments/webhook', webhookRouter);
 app.use('/api/payment/webhook', webhookRouter);
+app.use('/webhooks/cutluy', webhookRouter);
+app.use('/api/webhooks/cutluy', webhookRouter);
 
 // ─── Product Image Upload ─────────────────────────────────────────────────────
 import { authenticateJWT, requireAdmin } from './middleware/auth';

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" fill="none">
+  <rect width="200" height="120" rx="28" fill="#0c5a71"/>
+  <text x="96" y="68" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="38" text-anchor="middle" letter-spacing="2">ABA</text>
+  <rect x="145" y="40" width="8" height="12" fill="#e53935" rx="1"/>
+  <text x="100" y="94" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14" text-anchor="middle" letter-spacing="8">MOBILE</text>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="abaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00ACC1" />
+      <stop offset="50%" stop-color="#0097A7" />
+      <stop offset="100%" stop-color="#006064" />
+    </linearGradient>
+  </defs>
+  <!-- Rounded Square Background with Teal Cyan Gradient -->
+  <rect width="200" height="200" rx="24" fill="url(#abaGradient)"/>
+
+  <!-- Red Accent Square / Apostrophe in ABA' -->
+  <rect x="160" y="52" width="14" height="20" rx="2" fill="#E53935" />
+
+  <!-- ABA bold text -->
+  <g fill="#FFFFFF">
+    <!-- Letter 'A' -->
+    <path d="M 52 104 L 38 104 L 46 64 L 62 64 L 70 104 L 56 104 L 54 94 L 42 94 Z M 48 76 L 44 87 L 52 87 Z" />
+    <!-- Letter 'B' -->
+    <path d="M 76 64 L 98 64 C 106 64 111 68 111 73 C 111 78 108 81 103 82 C 109 84 113 88 113 94 C 113 101 107 104 98 104 L 76 104 Z M 88 72 L 88 80 L 96 80 C 99 80 101 78 101 76 C 101 74 99 72 96 72 Z M 88 88 L 88 96 L 97 96 C 100 96 102 94 102 92 C 102 90 100 88 97 88 Z" />
+    <!-- Letter 'A' -->
+    <path d="M 134 104 L 120 104 L 128 64 L 144 64 L 152 104 L 138 104 L 136 94 L 124 94 Z M 130 76 L 126 87 L 134 87 Z" />
+  </g>
+
+  <!-- MERCHANT subtitle text -->
+  <text x="100" y="142" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="16" letter-spacing="3" text-anchor="middle">
+    MERCHANT
+  </text>
+</svg>

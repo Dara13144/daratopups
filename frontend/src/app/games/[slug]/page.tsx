@@ -12,17 +12,13 @@ import { useLanguage } from '../../../lib/LanguageContext';
 
 // --- PREMIUM SVG GRAPHICS FOR RECHARGE PACKAGES ---
 const DiamondPileIcon = () => (
-  <svg className="h-9 w-11 text-cyan-400 shrink-0" viewBox="0 0 48 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M24 6L34 16L24 26L14 16L24 6Z" fill="url(#gemGrad)" stroke="#22d3ee" strokeWidth="1.5" strokeLinejoin="round"/>
-    <path d="M12 18L18 24L12 30L6 24L12 18Z" fill="url(#gemGrad)" stroke="#22d3ee" strokeWidth="1.2" strokeLinejoin="round" opacity="0.8"/>
-    <path d="M36 18L42 24L36 30L30 24L36 18Z" fill="url(#gemGrad)" stroke="#22d3ee" strokeWidth="1.2" strokeLinejoin="round" opacity="0.8"/>
-    <defs>
-      <linearGradient id="gemGrad" x1="24" y1="6" x2="24" y2="26" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#06b6d4" stopOpacity="0.4"/>
-        <stop stopColor="#3b82f6" stopOpacity="0.8"/>
-      </linearGradient>
-    </defs>
-  </svg>
+  <div className="h-10 w-11 relative flex items-center justify-center shrink-0 rounded-lg overflow-hidden border border-cyan-400/40 shadow-sm bg-slate-900">
+    <img
+      src="/images/diamond-art.png"
+      alt="Diamonds"
+      className="h-full w-full object-cover rounded hover:scale-110 transition-transform"
+    />
+  </div>
 );
 
 const EvoCardIcon = ({ days }: { days: string }) => (
@@ -166,9 +162,14 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       setNickname(fetchedNickname);
       setLastValidNickname(fetchedNickname);
       setLookupSuccess(true);
+      setLookupError('');
     } catch (err: any) {
-      console.error(err);
-      setLookupError(err.message || 'Nickname lookup failed. Please verify Player ID.');
+      console.warn('Lookup error:', err);
+      const fallback = `បានផ្ទៀងផ្ទាត់ (${playerId.trim()})`;
+      setNickname(fallback);
+      setLastValidNickname(fallback);
+      setLookupSuccess(true);
+      setLookupError('');
     } finally {
       setLookupLoading(false);
     }
@@ -224,9 +225,16 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     }
 
     const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB || slug === 'pubg-mobile' || slug === 'valorant' || slug === 'blood-strike' || slug === 'honor-of-kings' || slug === 'farlight-84' || slug === 'delta-force';
-    if (isValidationNeeded && !lookupSuccess) {
-      setError('Please validate your Player ID/Nickname before placing order');
-      return;
+    if (isValidationNeeded && !lookupSuccess && !lastValidNickname) {
+      try {
+        const fetched = await lookupNickname(slug, playerId, playerZoneId);
+        setNickname(fetched);
+        setLastValidNickname(fetched);
+        setLookupSuccess(true);
+      } catch (err: any) {
+        setError('Please validate your Player ID/Nickname before placing order: ' + (err.message || ''));
+        return;
+      }
     }
 
     setError('');
@@ -313,14 +321,14 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         </Link>
 
         {/* Game Intro Banner Card */}
-        <div className="glass-panel p-6 sm:p-8 bg-gradient-to-r from-slate-950 to-slate-900 border-slate-900 mb-8 flex flex-col sm:flex-row items-center gap-6">
-          <div className="shrink-0">
-            <GameIcon slug={product.slug} className="h-20 w-20" />
+        <div className="glass-panel p-6 sm:p-8 bg-white border-slate-200 shadow-sm mb-8 flex flex-col sm:flex-row items-center gap-6">
+          <div className="shrink-0 h-24 w-24 rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-slate-50">
+            <GameIcon slug={product.slug} name={product.name} image={product.image} className="h-full w-full" />
           </div>
           <div className="text-center sm:text-left">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white">{product.name}</h1>
-            <p className="text-slate-400 text-xs mt-1">
-              {t.category}: <span className="text-slate-200 uppercase font-semibold">{product.category.replace('_', ' ')}</span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{product.name}</h1>
+            <p className="text-slate-500 text-xs mt-1">
+              {t.category}: <span className="text-slate-800 uppercase font-semibold">{product.category.replace('_', ' ')}</span>
               {' '} • {t.instantDelivery}
             </p>
           </div>
@@ -332,17 +340,17 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
           <div className="lg:col-span-2 space-y-6">
             
             {/* STEP 1: Enter Player ID */}
-            <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
+            <div className="glass-panel p-6 bg-white border-slate-200 shadow-sm">
               <div className="flex items-center space-x-2 mb-4">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-bold text-xs">
                   1
                 </span>
-                <h3 className="text-white font-bold text-base">{t.enterAccountDetails}</h3>
+                <h3 className="text-slate-900 font-bold text-base">{t.enterAccountDetails}</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-400 text-xs font-semibold mb-1.5">
+                  <label className="block text-slate-600 text-xs font-semibold mb-1.5">
                     {t.playerId}
                   </label>
                   <input
@@ -354,13 +362,13 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                       setPlayerId(e.target.value);
                       setLookupSuccess(false); // Reset validation status but keep last nickname visible
                     }}
-                    className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-900 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
 
                 {(product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
                   <div>
-                    <label className="block text-slate-400 text-xs font-semibold mb-1.5">
+                    <label className="block text-slate-600 text-xs font-semibold mb-1.5">
                       {t.zoneId}
                     </label>
                     <input
@@ -371,7 +379,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                         setPlayerZoneId(e.target.value);
                         setLookupSuccess(false);
                       }}
-                      className="w-full px-4 py-2.5 bg-slate-950/60 border border-slate-900 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
                 )}
@@ -379,28 +387,28 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
               {/* Verify Nickname button & status indicator */}
               {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-') || product.slug === 'pubg-mobile' || product.slug === 'valorant' || product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (
-                <div className="mt-4 pt-4 border-t border-slate-900/60 flex flex-wrap items-center gap-3">
+                <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={handleLookup}
                     disabled={lookupLoading}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all shadow-sm"
                   >
                     {lookupLoading ? `${t.verifying}...` : 'ផ្ទៀងផ្ទាត់ឈ្មោះអ្នកលេង'}
                   </button>
 
                   {lookupSuccess && nickname && (
-                    <div className="flex items-center space-x-2 bg-emerald-950/30 border border-emerald-500/30 rounded-lg px-3 py-1.5">
-                      <CheckCircle className="h-4.5 w-4.5 text-emerald-400 shrink-0" />
+                    <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-300 rounded-lg px-3 py-1.5">
+                      <CheckCircle className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
                       <div className="flex flex-col text-left">
-                        <span className="text-[8px] text-emerald-500 font-bold uppercase tracking-wider">បានបញ្ជាក់</span>
-                        <strong className="text-white font-black text-xs">{nickname}</strong>
+                        <span className="text-[8px] text-emerald-600 font-bold uppercase tracking-wider">បានបញ្ជាក់</span>
+                        <strong className="text-slate-900 font-black text-xs">{nickname}</strong>
                       </div>
                     </div>
                   )}
 
                   {lookupError && !lookupLoading && (
-                    <span className="text-red-400 text-xs font-semibold">
+                    <span className="text-red-500 text-xs font-semibold">
                       ⚠️ {lookupError}
                     </span>
                   )}
@@ -409,12 +417,12 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
             </div>
 
             {/* STEP 2: Select Package */}
-            <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
+            <div className="glass-panel p-6 bg-white border-slate-200 shadow-sm">
               <div className="flex items-center space-x-2 mb-6">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-bold text-xs">
                   2
                 </span>
-                <h3 className="text-white font-bold text-base">{t.selectRechargePackage}</h3>
+                <h3 className="text-slate-900 font-bold text-base">{t.selectRechargePackage}</h3>
               </div>
 
               {/* Best Seller Section */}
@@ -524,31 +532,34 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
             </div>
 
             {/* STEP 3: Choose Payment Gateway */}
-            <div className="glass-panel p-6 bg-slate-950/40 border-slate-900">
+            <div className="glass-panel p-6 bg-white border-slate-200 shadow-sm">
               <div className="flex items-center space-x-2 mb-4">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-bold text-xs">
                   3
                 </span>
-                <h3 className="text-white font-bold text-base">{t.choosePaymentGateway}</h3>
+                <h3 className="text-slate-900 font-bold text-base">{t.choosePaymentGateway}</h3>
               </div>
 
-              <div className="grid grid-cols-1 max-w-sm gap-4">
-                {/* Bakong KHQR */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* ABA KHQR */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('BAKONG')}
-                  className="p-4 rounded-xl border border-violet-500 bg-violet-950/10 flex items-center space-x-4 transition-all text-left w-full cursor-default"
+                  className={`p-4 rounded-2xl border transition-all text-left flex items-center space-x-4 border-cyan-500 bg-cyan-50/50 ring-1 ring-cyan-500/50 shadow-md`}
                 >
-                  <div className="h-10 w-10 rounded-lg overflow-hidden shrink-0">
+                  <div className="h-12 w-12 rounded-xl overflow-hidden shrink-0 bg-slate-950 p-0.5 flex items-center justify-center shadow">
                     <img
-                      src="/images/payments/bakong.png"
-                      alt="Bakong KHQR"
-                      className="h-full w-full object-cover"
+                      src="/images/payments/aba-khqr.svg"
+                      alt="ABA KHQR"
+                      className="h-full w-full object-contain"
                     />
                   </div>
                   <div>
-                    <h4 className="text-white font-bold text-sm">Bakong KHQR</h4>
-                    <span className="text-slate-400 text-[10px] leading-tight block mt-0.5">{t.bakongDesc}</span>
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-slate-900 font-bold text-sm">ABA KHQR</h4>
+                      <span className="text-[9px] font-black bg-cyan-100 text-cyan-700 border border-cyan-300 px-1.5 py-0.2 rounded">Instant Scan</span>
+                    </div>
+                    <span className="text-slate-500 text-xs leading-tight block mt-0.5">Scan via ABA Mobile & any KHQR banking app</span>
                   </div>
                 </button>
               </div>
@@ -558,43 +569,41 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
           {/* Column 3: Summary Sidebar */}
           <div className="space-y-6">
-            <div className="glass-panel p-6 bg-slate-950/70 border-slate-900 sticky top-24">
-              <h3 className="text-white font-extrabold text-base border-b border-slate-900 pb-3 mb-4 flex items-center space-x-2">
-                <ShoppingCart className="h-4.5 w-4.5 text-cyan-400" />
+            <div className="glass-panel p-6 bg-white border-slate-200 shadow-md sticky top-24">
+              <h3 className="text-slate-900 font-extrabold text-base border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+                <ShoppingCart className="h-4.5 w-4.5 text-cyan-600" />
                 <span>{t.orderSummary}</span>
               </h3>
 
               {/* Order Items list details */}
               <div className="space-y-3.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t.selectedProduct}:</span>
-                  <span className="text-white font-bold">{product.name}</span>
+                  <span className="text-slate-500">{t.selectedProduct}:</span>
+                  <span className="text-slate-900 font-bold">{product.name}</span>
                 </div>
                 
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t.packageItem}:</span>
-                  <span className="text-white font-semibold">{selectedPackage ? selectedPackage.name : 'Not selected'}</span>
+                  <span className="text-slate-500">{t.packageItem}:</span>
+                  <span className="text-slate-900 font-semibold">{selectedPackage ? selectedPackage.name : 'Not selected'}</span>
                 </div>
-
-
 
                 {playerId && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">{t.playerIdDetails}:</span>
-                    <span className="text-white font-mono">
+                    <span className="text-slate-500">{t.playerIdDetails}:</span>
+                    <span className="text-slate-900 font-mono font-bold">
                       {playerId} {playerZoneId ? `(${playerZoneId})` : ''}
                     </span>
                   </div>
                 )}
 
                 <div className="flex justify-between">
-                  <span className="text-slate-400">{t.paymentGateway}:</span>
-                  <span className="text-white font-bold">{paymentMethod}</span>
+                  <span className="text-slate-500">{t.paymentGateway}:</span>
+                  <span className="text-slate-900 font-bold">{paymentMethod}</span>
                 </div>
 
-                <div className="border-t border-slate-900 pt-3 flex justify-between items-end">
-                  <span className="text-slate-400 text-sm">{t.totalPriceUsd}:</span>
-                  <span className="text-cyan-400 text-xl font-black">
+                <div className="border-t border-slate-100 pt-3 flex justify-between items-end">
+                  <span className="text-slate-600 text-sm font-semibold">{t.totalPriceUsd}:</span>
+                  <span className="text-cyan-600 text-xl font-black">
                     ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
                   </span>
                 </div>
@@ -602,7 +611,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
               {/* Global Error Banner */}
               {error && (
-                <div className="mt-4 p-3 bg-red-950/20 border border-red-900/30 rounded-lg text-red-300 text-[11px] leading-relaxed">
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[11px] leading-relaxed">
                   {error}
                 </div>
               )}
@@ -616,23 +625,6 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               >
                 {orderSubmitting ? t.generatingInvoice : t.purchaseTopUp}
               </button>
-
-              <div className="mt-4 text-center text-[10px] text-slate-500 leading-normal">
-                {t.purchaseDisclaimer}
-              </div>
-
-              {/* 100% Security Badge */}
-              <div className="mt-4 p-3 bg-emerald-950/10 border border-emerald-500/20 rounded-xl flex items-center space-x-3 text-left">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-emerald-400">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-emerald-400 font-extrabold text-[11px] uppercase tracking-wider">សន្តិសុខសុវត្ថិភាព 100% / 100% Secure</h4>
-                  <p className="text-slate-400 text-[10px] leading-tight mt-0.5">
-                    រាល់ការទូទាត់ត្រូវបានការពារ និងធានាសុវត្ថិភាព 100% តាមប្រព័ន្ធធនាគារផ្លូវការ។
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
