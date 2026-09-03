@@ -542,8 +542,8 @@ export default function AdminDashboard() {
                           {['Game','Player','Amount','Status'].map(h=><th key={h} className="py-2 pr-4 font-semibold">{h}</th>)}
                         </tr></thead>
                         <tbody className="divide-y divide-slate-800">
-                          {recentOrders.map((o: any) => (
-                            <tr key={o.id} className="hover:bg-slate-800/20">
+                          {recentOrders.map((o: any, idx: number) => (
+                            <tr key={`ro-${o.id || idx}-${idx}`} className="hover:bg-slate-800/20">
                               <td className="py-2.5 pr-4 text-white font-semibold">{o.package?.product?.name||'—'}</td>
                               <td className="py-2.5 pr-4 text-slate-300">{o.playerNickname||o.playerId}</td>
                               <td className="py-2.5 pr-4 text-cyan-400 font-bold">${o.price.toFixed(2)}</td>
@@ -604,8 +604,8 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {orders.map((o: any) => (
-                          <React.Fragment key={o.id}>
+                        {orders.map((o: any, oIdx: number) => (
+                          <React.Fragment key={`order-${o.id || oIdx}-${oIdx}`}>
                             <tr className="hover:bg-slate-800/20">
                               <td className="px-4 py-3 font-mono text-slate-400 text-[10px] whitespace-nowrap">{o.paymentTxnId?.slice(0,18)}…</td>
                               <td className="px-4 py-3"><div className="text-white font-semibold whitespace-nowrap">{o.package?.product?.name}</div><div className="text-slate-500 text-[10px]">{o.package?.name}</div></td>
@@ -681,8 +681,8 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {stocks.map((st:any)=>(
-                          <tr key={st.id} className="hover:bg-slate-800/20">
+                        {stocks.map((st: any, sIdx: number) => (
+                          <tr key={`stock-${st.id || sIdx}-${sIdx}`} className="hover:bg-slate-800/20">
                             <td className="px-4 py-3"><div className="text-white font-semibold">{st.package?.product?.name}</div><div className="text-slate-500 text-[10px]">{st.package?.name}</div></td>
                             <td className="px-4 py-3 font-mono text-slate-300">{st.code}</td>
                             <td className="px-4 py-3">{st.isUsed?<span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900 text-slate-500 border border-slate-800">USED</span>:<span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.2)', color:'#10b981' }}>AVAIL</span>}</td>
@@ -1325,8 +1325,8 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-800/60">
-                      {snapshots.map((snap: any) => (
-                        <div key={snap.filename} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+                      {snapshots.map((snap: any, snIdx: number) => (
+                        <div key={`snap-${snap.filename || snIdx}-${snIdx}`} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
                           <div className="min-w-0">
                             <div className="flex items-center space-x-2">
                               <span className="font-mono text-xs font-bold text-white truncate">{snap.filename}</span>
