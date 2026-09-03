@@ -558,7 +558,7 @@ export default function AdminDashboard() {
                     <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><Star className="h-4 w-4 text-amber-400" /><span>Popularity</span></h3>
                     <div className="space-y-3">
                       {popularity.map((g: any, i: number) => (
-                        <div key={g.name} className="flex items-center" style={{ gap: 10 }}>
+                        <div key={`pop-${g.id || g.name || 'game'}-${i}`} className="flex items-center" style={{ gap: 10 }}>
                           <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
                             style={{ background: i===0?'rgba(245,158,11,.2)':'rgba(51,65,85,.5)', color: i===0?'#f59e0b':'#64748b' }}>{i+1}</span>
                           <div className="flex-1 min-w-0">
@@ -652,7 +652,7 @@ export default function AdminDashboard() {
                     <div>
                       <label className="block text-slate-400 font-semibold mb-1.5">Package</label>
                       <select value={selectedPackageId} onChange={e=>setSelectedPackageId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500">
-                        {allProducts.map(prod=>prod.packages.map(pkg=><option key={pkg.id} value={pkg.id}>{prod.name} — {pkg.name}</option>))}
+                        {allProducts.flatMap((prod, pIdx)=>(prod.packages || []).map((pkg, kIdx)=><option key={`opt-${prod.id || pIdx}-${pkg.id || kIdx}`} value={pkg.id}>{prod.name} — {pkg.name}</option>))}
                       </select>
                     </div>
                     <div>
@@ -746,7 +746,7 @@ export default function AdminDashboard() {
                     <form onSubmit={handleCreatePackage} className="space-y-4">
                       <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Game Product</label>
                         <select value={selectedProductId} onChange={e=>setSelectedProductId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs">
-                          {allProducts.map(p=><option key={p.id} value={p.id}>{p.name} ({p.category})</option>)}
+                          {allProducts.map((p, pIdx)=><option key={`prod-sel-${p.id || pIdx}`} value={p.id}>{p.name} ({p.category})</option>)}
                         </select></div>
                       <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Name</label>
                         <input type="text" required placeholder="e.g. 50 Diamonds, 100+10 Diamonds" value={newPackageName} onChange={e=>setNewPackageName(e.target.value)} className={inputCls}/></div>
@@ -817,8 +817,8 @@ export default function AdminDashboard() {
 
                     return (
                       <div className="space-y-4">
-                        {filteredCatalog.map(prod => (
-                          <div key={prod.id} className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
+                        {filteredCatalog.map((prod, prodIdx) => (
+                          <div key={`cat-prod-${prod.id || prodIdx}`} className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
                             {/* Product Header Bar */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border-b border-slate-800/80 bg-slate-950/40">
                               <div className="flex items-center space-x-3 min-w-0">
@@ -896,9 +896,9 @@ export default function AdminDashboard() {
                                 <p className="text-slate-600 text-xs italic">No packages assigned to this game yet.</p>
                               ) : (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                                  {prod.packages.map(pkg => (
+                                  {(prod.packages || []).map((pkg, pkgIdx) => (
                                     <div
-                                      key={pkg.id}
+                                      key={`pkg-item-${pkg.id || pkgIdx}`}
                                       className="group relative border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition-all bg-slate-950/60 flex flex-col justify-between"
                                     >
                                       <div>
