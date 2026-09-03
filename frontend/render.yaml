@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: robbytopupv2-frontend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_API_URL
+        value: https://robbytopupv2-backend.onrender.com
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://robbytopupv2-backend.onrender.com
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        value: "206329302084-3fm2qg6o3r48f8hsi3n7pthefuoh3ggt.apps.googleusercontent.com"
