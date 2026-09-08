@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { 
-  LogOut, LayoutDashboard, History, Menu, X, 
+  LogOut, LayoutDashboard, Menu, X, 
   Home, Gamepad2, Send, User, ChevronRight, Sparkles 
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
@@ -107,16 +107,6 @@ export default function Header() {
                 }`}
               >
                 {t.browseGames}
-              </Link>
-              <Link
-                href="/history"
-                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                  pathname === '/history'
-                    ? 'text-cyan-700 bg-cyan-50 border border-cyan-200'
-                    : 'text-slate-700 hover:text-cyan-600 hover:bg-slate-100'
-                }`}
-              >
-                {t.myOrders}
               </Link>
               {mounted && isAdmin && (
                 <Link
@@ -299,21 +289,6 @@ export default function Header() {
                 <ChevronRight className="h-4 w-4 text-slate-400" />
               </Link>
 
-              <Link
-                href="/history"
-                onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all ${
-                  pathname === '/history'
-                    ? 'bg-cyan-50 text-cyan-700 border border-cyan-200/80 font-black'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <History className="h-4 w-4 text-violet-600" />
-                  <span>{t.myOrders}</span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-400" />
-              </Link>
 
               <a
                 href="https://t.me/darazzdev"
