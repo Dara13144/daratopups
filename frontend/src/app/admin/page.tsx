@@ -18,12 +18,13 @@ import {
   HardDrive, Download, ShieldCheck, History, RotateCcw, FileText, Check,
   Pencil, Edit, Eye, EyeOff, SlidersHorizontal, Menu
 } from 'lucide-react';
+import SecurityDashboard from '../../components/SecurityDashboard';
 
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'backup'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'backup' | 'security'>('metrics');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -434,6 +435,7 @@ export default function AdminDashboard() {
     { id: 'stock', icon: Database, label: 'Voucher Stock', count: stocks.filter((s: any) => !s.isUsed).length },
     { id: 'products', icon: Package, label: 'Products', count: allProducts.length },
     { id: 'backup', icon: HardDrive, label: 'Backup & Restore', count: snapshots.length || null },
+    { id: 'security', icon: ShieldCheck, label: 'Security & DDoS', count: null },
   ] as const;
 
   if (!isAdmin) return null;
@@ -1453,6 +1455,11 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* ── TAB 6: SECURITY & ANTI-DDOS PROTECTION ────────────── */}
+            {activeTab === 'security' && (
+              <SecurityDashboard />
             )}
           </>)}
         </main>

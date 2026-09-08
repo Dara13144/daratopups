@@ -1,9 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import SecurityChallengeModal from './SecurityChallengeModal';
 
 export default function SecurityGuard() {
+  const [needsChallenge, setNeedsChallenge] = useState(false);
+
   useEffect(() => {
+    // Listen for custom Under Attack Mode challenge trigger from API calls
+    const handleChallengeEvent = () => {
+      setNeedsChallenge(true);
+    };
+
+    window.addEventListener('dara-security-challenge', handleChallengeEvent);
+
     // Disable F12 and DevTools shortcut combinations
     const handleKeyDown = (e: KeyboardEvent) => {
       // F12 key
@@ -51,10 +61,15 @@ export default function SecurityGuard() {
     window.addEventListener('contextmenu', handleContextMenu, true);
 
     return () => {
+      window.removeEventListener('dara-security-challenge', handleChallengeEvent);
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('contextmenu', handleContextMenu, true);
     };
   }, []);
+
+  if (needsChallenge) {
+    return <SecurityChallengeModal onSuccess={() => setNeedsChallenge(false)} />;
+  }
 
   return null;
 }

@@ -687,3 +687,170 @@ export async function deleteAdminSnapshot(filename: string) {
   throw new Error('Failed to delete snapshot');
 }
 
+// ─── Security & Anti-DDoS API ────────────────────────────────────────────────
+export async function fetchSecurityStats() {
+  const endpoints = [
+    `${API_BASE}/security/stats`,
+    'http://localhost:5001/api/security/stats',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to fetch security stats');
+}
+
+export async function fetchSecurityLogs(limit: number = 50) {
+  const endpoints = [
+    `${API_BASE}/security/logs?limit=${limit}`,
+    `http://localhost:5001/api/security/logs?limit=${limit}`,
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to fetch security logs');
+}
+
+export async function fetchSecurityConfig() {
+  const endpoints = [
+    `${API_BASE}/security/config`,
+    'http://localhost:5001/api/security/config',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { headers: getAuthHeaders() });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to fetch security config');
+}
+
+export async function updateSecurityConfig(config: any) {
+  const endpoints = [
+    `${API_BASE}/security/config`,
+    'http://localhost:5001/api/security/config',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(config),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to update security config');
+}
+
+export async function blockSecurityIp(ip: string, reason: string, durationMinutes?: number) {
+  const endpoints = [
+    `${API_BASE}/security/ip/block`,
+    'http://localhost:5001/api/security/ip/block',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ip, reason, durationMinutes }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to block IP');
+}
+
+export async function unblockSecurityIp(ip: string) {
+  const endpoints = [
+    `${API_BASE}/security/ip/unblock`,
+    'http://localhost:5001/api/security/ip/unblock',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ip }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to unblock IP');
+}
+
+export async function allowSecurityIp(ip: string, reason?: string) {
+  const endpoints = [
+    `${API_BASE}/security/ip/allow`,
+    'http://localhost:5001/api/security/ip/allow',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ip, reason }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to allowlist IP');
+}
+
+export async function removeAllowSecurityIp(ip: string) {
+  const endpoints = [
+    `${API_BASE}/security/ip/allow`,
+    'http://localhost:5001/api/security/ip/allow',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ip }),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Failed to remove IP from allowlist');
+}
+
+export async function fetchMyIp(): Promise<string> {
+  const endpoints = [
+    `${API_BASE}/security/my-ip`,
+    'http://localhost:5001/api/security/my-ip',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        return data.ip || '127.0.0.1';
+      }
+    } catch (e) {}
+  }
+  return '127.0.0.1';
+}
+
+export async function fetchSecurityChallenge() {
+  const res = await fetch(`${API_BASE}/security/challenge`);
+  if (!res.ok) throw new Error('Failed to request challenge');
+  return res.json();
+}
+
+export async function verifySecurityChallenge(nonce: string, timestamp: number, clientHash: string) {
+  const res = await fetch(`${API_BASE}/security/challenge/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nonce, timestamp, clientHash }),
+  });
+  if (!res.ok) throw new Error('Challenge verification failed');
+  return res.json();
+}
+
+
