@@ -7,7 +7,7 @@ import Script from 'next/script';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { loginWithGoogle } from '../../lib/api';
-import { Gamepad2, AlertCircle, CheckCircle2, ShieldCheck, Zap, Sparkles } from 'lucide-react';
+import { Gamepad2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '212551130685-hln5k9en81aq0d2884l8qk9v38ocb6rq.apps.googleusercontent.com';
 
@@ -165,30 +165,6 @@ export default function LoginPage() {
 
             {/* Native GSI Render Target */}
             <div id="google-btn-native" className="flex justify-center"></div>
-          </div>
-
-          {/* Features / Guarantees */}
-          <div className="mt-6 pt-5 border-t border-slate-100 space-y-2.5">
-            <div className="flex items-center space-x-2.5 text-xs text-slate-600">
-              <div className="h-6 w-6 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0">
-                <Zap className="h-3.5 w-3.5" />
-              </div>
-              <span>Fast 1-tap instant login without remembering passwords</span>
-            </div>
-
-            <div className="flex items-center space-x-2.5 text-xs text-slate-600">
-              <div className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <ShieldCheck className="h-3.5 w-3.5" />
-              </div>
-              <span>Protected by Google OAuth 2.0 encryption</span>
-            </div>
-
-            <div className="flex items-center space-x-2.5 text-xs text-slate-600">
-              <div className="h-6 w-6 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-                <Sparkles className="h-3.5 w-3.5" />
-              </div>
-              <span>Administrator (mdara9695@gmail.com) auto-directs to Admin Portal</span>
-            </div>
           </div>
 
           {/* Support Link */}
