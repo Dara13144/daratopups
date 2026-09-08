@@ -72,7 +72,7 @@ export default function LoginPage() {
         const btnContainer = document.getElementById('google-btn-native');
         if (btnContainer) {
           window.google.accounts.id.renderButton(btnContainer, {
-            theme: 'filled_black',
+            theme: 'outline',
             size: 'large',
             width: 320,
             text: 'continue_with',
@@ -111,11 +111,9 @@ export default function LoginPage() {
 
     try {
       if (isRegister) {
-        // Register API flow
         const data = await register(email, password);
         setSuccess('Registration successful! Logging you in...');
         
-        // Save auth state
         localStorage.setItem('token', data.token);
         localStorage.setItem('user_role', data.user.role);
         localStorage.setItem('user_email', data.user.email);
@@ -127,13 +125,11 @@ export default function LoginPage() {
             router.push('/');
           }
           router.refresh();
-        }, 1200);
+        }, 1000);
       } else {
-        // Login API flow
         const data = await login(email, password);
         setSuccess('Login successful! Redirecting...');
         
-        // Save auth state
         localStorage.setItem('token', data.token);
         localStorage.setItem('user_role', data.user.role);
         localStorage.setItem('user_email', data.user.email);
@@ -145,7 +141,7 @@ export default function LoginPage() {
             router.push('/');
           }
           router.refresh();
-        }, 1200);
+        }, 1000);
       }
     } catch (err: any) {
       console.error(err);
@@ -164,51 +160,48 @@ export default function LoginPage() {
       />
       <Header />
       
-      <main className="flex-grow flex items-center justify-center py-16 px-4">
-        <div className="max-w-md w-full glass-panel p-8 bg-slate-950/80 border-slate-900 shadow-2xl relative rounded-2xl">
-          {/* Accent glow behind login card */}
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-40 h-40 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
-
+      <main className="flex-grow flex items-center justify-center py-6 sm:py-16 px-3 sm:px-4 pb-24 md:pb-12 overflow-x-hidden">
+        <div className="max-w-md w-full glass-panel p-5 sm:p-8 bg-white border-slate-200 shadow-xl relative rounded-2xl sm:rounded-3xl">
+          
           {/* Form Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex bg-gradient-to-r from-cyan-500 to-violet-500 p-2.5 rounded-2xl text-white mb-3 shadow-lg shadow-cyan-500/20">
+          <div className="text-center mb-6 sm:mb-8">
+            <div className="inline-flex bg-gradient-to-r from-cyan-500 to-violet-500 p-2.5 rounded-2xl text-white mb-3 shadow-md shadow-cyan-500/20">
               <Gamepad2 className="h-6 w-6" />
             </div>
-            <h2 className="text-2xl font-extrabold text-white">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
               {isRegister ? 'Create Account' : 'Welcome Back'}
             </h2>
-            <p className="text-slate-400 text-xs mt-1">
+            <p className="text-slate-500 text-xs mt-1">
               {isRegister 
-                ? 'Join KH-TOPUP to track your digital product orders' 
-                : 'Sign in to access your dashboard and purchase history'}
+                ? 'Join ROBBY-TOPUP to easily track your recharge invoices' 
+                : 'Sign in to access your recharge orders and history'}
             </p>
           </div>
 
           {/* Alerts display */}
           {error && (
-            <div className="flex items-start space-x-2 bg-red-950/40 border border-red-800/50 rounded-xl p-3 mb-6 text-red-300 text-xs">
-              <AlertCircle className="h-4.5 w-4.5 shrink-0 text-red-400" />
+            <div className="flex items-start space-x-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-5 text-red-700 text-xs">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="flex items-start space-x-2 bg-emerald-950/40 border border-emerald-800/50 rounded-xl p-3 mb-6 text-emerald-300 text-xs">
-              <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-400" />
+            <div className="flex items-start space-x-2 bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-5 text-emerald-700 text-xs">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
               <span>{success}</span>
             </div>
           )}
 
           {/* Google Sign In Quick Button */}
-          <div className="mb-6 space-y-3">
+          <div className="mb-5 space-y-3">
             <button
               type="button"
               onClick={handleCustomGoogleClick}
               disabled={googleLoading || loading}
-              className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-slate-600 rounded-xl text-white font-semibold text-sm transition-all duration-200 shadow-md active:scale-[0.99] disabled:opacity-50"
+              className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-bold text-xs sm:text-sm transition-all shadow-xs active:scale-[0.99] disabled:opacity-50 min-h-[44px]"
             >
-              {/* Official Google Multicolor G Icon */}
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -229,26 +222,25 @@ export default function LoginPage() {
               <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
             </button>
 
-            {/* Hidden native container for Google One-Tap rendering */}
             <div id="google-btn-native" className="hidden"></div>
 
-            <div className="relative flex items-center justify-center py-2">
-              <div className="border-t border-slate-800 w-full"></div>
-              <span className="bg-slate-950 px-3 text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
+            <div className="relative flex items-center justify-center py-1.5">
+              <div className="border-t border-slate-200 w-full"></div>
+              <span className="bg-white px-3 text-[11px] text-slate-400 uppercase tracking-wider font-bold shrink-0">
                 or with email
               </span>
-              <div className="border-t border-slate-800 w-full"></div>
+              <div className="border-t border-slate-200 w-full"></div>
             </div>
           </div>
 
           {/* Auth Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
             <div>
-              <label className="block text-slate-400 text-xs font-semibold mb-1.5" htmlFor="email">
+              <label className="block text-slate-700 text-xs font-bold mb-1.5" htmlFor="email">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   id="email"
                   type="email"
@@ -256,17 +248,17 @@ export default function LoginPage() {
                   placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                  className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-slate-400 text-xs font-semibold mb-1.5" htmlFor="password">
+              <label className="block text-slate-700 text-xs font-bold mb-1.5" htmlFor="password">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   id="password"
                   type="password"
@@ -274,7 +266,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                  className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                 />
               </div>
             </div>
@@ -282,23 +274,24 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || googleLoading}
-              className="w-full flex items-center justify-center space-x-1.5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-bold text-sm shadow-md transition-all duration-300 glow-btn disabled:opacity-50"
+              className="w-full flex items-center justify-center space-x-1.5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-black text-sm shadow-md transition-all glow-btn disabled:opacity-50 min-h-[44px] active:scale-[0.99]"
             >
-              <span>{loading ? 'Please wait...' : isRegister ? 'Sign Up' : 'Sign In'}</span>
+              <span>{loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Sign In'}</span>
               {!loading && <ArrowRight className="h-4 w-4" />}
             </button>
           </form>
 
           {/* Switch toggle tab */}
-          <div className="mt-6 text-center text-xs text-slate-400">
+          <div className="mt-5 sm:mt-6 text-center text-xs text-slate-500">
             {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
+              type="button"
               onClick={() => {
                 setIsRegister(!isRegister);
                 setError('');
                 setSuccess('');
               }}
-              className="text-cyan-400 font-bold hover:underline"
+              className="text-cyan-600 font-bold hover:underline ml-1"
             >
               {isRegister ? 'Sign In' : 'Create One'}
             </button>
