@@ -9,7 +9,7 @@ import Footer from '../../components/Footer';
 import { login, register, loginWithGoogle } from '../../lib/api';
 import { Gamepad2, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '206329302084-3fm2qg6o3r48f8hsi3n7pthefuoh3ggt.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '212551130685-hln5k9en81aq0d2884l8qk9v38ocb6rq.apps.googleusercontent.com';
 
 declare global {
   interface Window {
@@ -245,7 +245,7 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   required
-                  placeholder="name@example.com"
+                  placeholder="mdara9695@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500 min-h-[44px]"
