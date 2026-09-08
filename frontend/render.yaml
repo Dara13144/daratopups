@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: robbytopupv2-frontend
+    name: daratopup-frontend
     env: node
     region: singapore
     plan: free
@@ -12,8 +12,8 @@ services:
       - key: PORT
         value: 3000
       - key: NEXT_PUBLIC_API_URL
-        value: https://robbytopupv2-backend.onrender.com
+        value: https://daratopup-backend-1.onrender.com
       - key: NEXT_PUBLIC_BACKEND_URL
-        value: https://robbytopupv2-backend.onrender.com
+        value: https://daratopup-backend-1.onrender.com
       - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        value: "206329302084-3fm2qg6o3r48f8hsi3n7pthefuoh3ggt.apps.googleusercontent.com"
+        value: "212551130685-hln5k9en81aq0d2884l8qk9v38ocb6rq.apps.googleusercontent.com"
