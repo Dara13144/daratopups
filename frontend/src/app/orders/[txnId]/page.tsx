@@ -177,7 +177,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     // Brand
     ctx.fillStyle = '#06b6d4';
     ctx.font = 'bold 14px sans-serif';
-    ctx.fillText('ROBBY-TOPUP', 350, 50);
+    ctx.fillText('DARA-TOPUP', 350, 50);
 
     // Green check icon container
     ctx.fillStyle = '#e6f4ea';
@@ -238,7 +238,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     ctx.fillStyle = '#94a3b8';
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Thank you for choosing ROBBY-TOPUP Cambodia!', 250, 620);
+    ctx.fillText('Thank you for choosing DARA-TOPUP Cambodia!', 250, 620);
     ctx.fillText('Support Telegram: @darazzdev', 250, 640);
 
     // Save and download

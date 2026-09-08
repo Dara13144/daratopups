@@ -55,7 +55,7 @@ export default function Footer() {
         {/* Footer Bottom info */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <p className="text-center sm:text-left text-[11px] sm:text-xs">
-            © {new Date().getFullYear()} 𝙍𝙊𝘽𝘽𝙔-𝙏𝙊𝙋𝙐𝙋. All rights reserved.
+            © {new Date().getFullYear()} DARA-TOPUP. All rights reserved.
           </p>
           <a
             href="https://t.me/darazzdev"

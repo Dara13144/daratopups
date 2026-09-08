@@ -61,7 +61,7 @@ export default function Home() {
         <div className="relative w-full rounded-xl sm:rounded-3xl overflow-hidden mb-5 sm:mb-8 shadow-xl shadow-slate-950/10 border border-slate-200">
           <Image
             src="/images/robby-banner.jpg"
-            alt="RobbyTopup - Instant Top Up Games"
+            alt="DaraTopup - Instant Top Up Games"
             width={1200}
             height={400}
             className="w-full h-auto object-cover max-h-[360px]"

@@ -173,7 +173,7 @@ export default function LoginPage() {
             </h2>
             <p className="text-slate-500 text-xs mt-1">
               {isRegister 
-                ? 'Join ROBBY-TOPUP to easily track your recharge invoices' 
+                ? 'Join DARA-TOPUP to easily track your recharge invoices' 
                 : 'Sign in to access your recharge orders and history'}
             </p>
           </div>

@@ -79,7 +79,7 @@ export default function Header() {
               <div className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full overflow-hidden ring-2 ring-cyan-500/60 group-hover:ring-cyan-400 transition-all shadow-md shadow-cyan-900/20 shrink-0">
                 <Image
                   src="/images/robby-avatar.png"
-                  alt="ROBBY-TOPUP"
+                  alt="DARA-TOPUP"
                   width={40}
                   height={40}
                   className="h-full w-full object-cover"
@@ -88,7 +88,7 @@ export default function Header() {
               </div>
               <div className="flex flex-col leading-none truncate">
                 <span className="font-black text-base sm:text-lg tracking-tight bg-gradient-to-r from-orange-500 via-amber-500 to-cyan-500 bg-clip-text text-transparent truncate">
-                  𝙍𝙊𝘽𝘽𝙔-𝙏𝙊𝙋𝙐𝙋
+                  𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋
                 </span>
                 <span className="text-[8.5px] sm:text-[9.5px] text-slate-500 font-semibold truncate">
                   • គុណភាព • សុវត្ថិភាព • តម្លៃសមរម្យ
@@ -252,7 +252,7 @@ export default function Header() {
               ) : (
                 <div className="p-3 bg-gradient-to-br from-cyan-50 to-violet-50 border border-cyan-200/60 rounded-2xl">
                   <div className="text-xs font-bold text-slate-800 mb-1">
-                    Welcome to ROBBY-TOPUP
+                    Welcome to DARA-TOPUP
                   </div>
                   <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
                     Sign in to easily track your recharge invoices and digital codes.
