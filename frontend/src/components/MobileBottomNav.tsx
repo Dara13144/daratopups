@@ -61,7 +61,7 @@ export default function MobileBottomNav() {
   return (
     <nav 
       aria-label="Mobile Bottom Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 shadow-[0_-8px_25px_rgba(0,0,0,0.06)] safe-area-pb"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/90 backdrop-blur-xl border-t border-slate-800 shadow-[0_-8px_25px_rgba(0,0,0,0.5)] safe-area-pb"
     >
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
         {navItems.map((item) => {
@@ -75,12 +75,12 @@ export default function MobileBottomNav() {
                 href={item.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-col items-center justify-center flex-1 h-full min-h-[44px] py-1 text-slate-500 hover:text-cyan-600 transition-colors group select-none active:scale-95"
+                className="flex flex-col items-center justify-center flex-1 h-full min-h-[44px] py-1 text-slate-400 hover:text-cyan-400 transition-colors group select-none active:scale-95"
               >
-                <div className="relative p-1 rounded-xl group-hover:bg-cyan-50 transition-colors">
-                  <Icon className="h-5 w-5 text-slate-500 group-hover:text-cyan-600 transition-colors" />
+                <div className="relative p-1 rounded-xl group-hover:bg-slate-800 transition-colors">
+                  <Icon className="h-5 w-5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 group-hover:text-cyan-600 mt-0.5 tracking-tight">
+                <span className="text-[10px] font-bold text-slate-400 group-hover:text-cyan-400 mt-0.5 tracking-tight">
                   {item.label}
                 </span>
               </a>
@@ -92,19 +92,19 @@ export default function MobileBottomNav() {
               key={item.label}
               href={item.href}
               className={`flex flex-col items-center justify-center flex-1 h-full min-h-[44px] py-1 transition-all select-none active:scale-95 ${
-                active ? 'text-cyan-600' : 'text-slate-500 hover:text-slate-800'
+                active ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <div className={`relative p-1 rounded-xl transition-all ${
-                active ? 'bg-cyan-50 text-cyan-600 scale-105' : ''
+                active ? 'bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 scale-105' : ''
               }`}>
-                <Icon className={`h-5 w-5 ${active ? 'text-cyan-600 stroke-[2.5]' : 'text-slate-500'}`} />
+                <Icon className={`h-5 w-5 ${active ? 'text-cyan-400 stroke-[2.5]' : 'text-slate-400'}`} />
                 {active && (
-                  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-cyan-600 rounded-full" />
+                  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-cyan-400 rounded-full" />
                 )}
               </div>
               <span className={`text-[10px] tracking-tight mt-0.5 ${
-                active ? 'font-black text-cyan-600' : 'font-semibold text-slate-500'
+                active ? 'font-black text-cyan-400' : 'font-semibold text-slate-400'
               }`}>
                 {item.label}
               </span>

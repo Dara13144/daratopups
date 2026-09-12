@@ -15,7 +15,7 @@ export const API_BASE = `${serverUrl}/api`;
 
 // Dev diagnostic only — does not affect production behavior
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  console.info(`[DaraTopup] resolved serverUrl: "${serverUrl}" and API_BASE: "${API_BASE}"`);
+  console.info(`[NaDyTopup] resolved serverUrl: "${serverUrl}" and API_BASE: "${API_BASE}"`);
 }
 
 export interface GameProduct {
@@ -98,6 +98,9 @@ export interface OrderStatusDetails {
   stockDeliveredCode: string | null;
   paymentQrCode?: string;
   paymentMd5?: string;
+  deepLink?: string | null;
+  payUrl?: string | null;
+  qrImageUrl?: string | null;
   createdAt: string;
   merchantName?: string;
   abaPayload?: Record<string, string> | null;
@@ -603,7 +606,7 @@ export async function downloadAdminBackup() {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `dara-topup-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `nady-topup-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "../lib/LanguageContext";
 import SecurityGuard from "../components/SecurityGuard";
-import MobileBottomNav from "../components/MobileBottomNav";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,15 +15,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋 - Game Recharge in Cambodia | Diamonds & Vouchers",
-  description: "𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋: Fastest game diamond top-ups and gift vouchers in Cambodia. Supports ABA PayWay and ABA KHQR auto-payment.",
+  title: "𝙉𝘼-𝘿𝙔 𝙏𝙊𝙋𝙐𝙋 - Game Recharge in Cambodia | Diamonds & Vouchers",
+  description: "𝙉𝘼-𝘿𝙔 𝙏𝙊𝙋𝙐𝙋: Fastest game diamond top-ups and gift vouchers in Cambodia. Supports ABA PayWay and ABA KHQR auto-payment.",
   icons: {
     icon: [
-      { url: '/images/robby-logo.png' },
-      { url: '/images/robby-avatar.png' },
+      { url: '/images/nady-logo.png' },
+      { url: '/images/nady-avatar.png' },
     ],
-    shortcut: '/images/robby-logo.png',
-    apple: '/images/robby-logo.png',
+    shortcut: '/images/nady-logo.png',
+    apple: '/images/nady-logo.png',
   },
 };
 
@@ -44,7 +43,6 @@ export default function RootLayout({
           <div className="flex-1 flex flex-col min-h-screen">
             {children}
           </div>
-          <MobileBottomNav />
         </LanguageProvider>
       </body>
     </html>

@@ -225,7 +225,7 @@ export default function SecurityDashboard() {
     return (
       <div className="flex flex-col items-center justify-center py-32 space-y-4">
         <div className="h-10 w-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 text-xs">Initializing DARA Shield Anti-DDoS Engine...</p>
+        <p className="text-slate-400 text-xs">Initializing NA-DY Shield Anti-DDoS Engine...</p>
       </div>
     );
   }
@@ -273,7 +273,7 @@ export default function SecurityDashboard() {
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-black text-white">DARA Shield Anti-DDoS & WAF</h2>
+                <h2 className="text-base sm:text-lg font-black text-white">NA-DY Shield Anti-DDoS & WAF</h2>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${
                   isUnderAttack
                     ? 'bg-red-500/20 text-red-300 border-red-500/50 animate-pulse'

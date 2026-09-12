@@ -377,7 +377,6 @@ export const GAME_ARTWORKS: Record<string, string> = {
   'subway-surfers': 'https://upload.wikimedia.org/wikipedia/en/d/da/Subway_Surfers_App_Icon.png',
   'temple-run-2': 'https://upload.wikimedia.org/wikipedia/en/d/da/Subway_Surfers_App_Icon.png',
   'angry-birds-2': 'https://upload.wikimedia.org/wikipedia/en/8/87/Brawl_Stars_cover_art.jpg',
-  '2048-game': 'https://upload.wikimedia.org/wikipedia/commons/1/18/2048_logo.svg',
   'fruit-ninja': 'https://upload.wikimedia.org/wikipedia/en/8/87/Brawl_Stars_cover_art.jpg',
   'jetpack-joyride': 'https://upload.wikimedia.org/wikipedia/en/8/87/Brawl_Stars_cover_art.jpg',
   'hill-climb-racing': 'https://upload.wikimedia.org/wikipedia/en/8/87/Brawl_Stars_cover_art.jpg',

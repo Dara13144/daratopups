@@ -1,5 +1,5 @@
 -- ====================================================================
--- SUPABASE FULL DATABASE SYSTEM SCHEMA FOR DARA-TOPUP
+-- SUPABASE FULL DATABASE SYSTEM SCHEMA FOR NA-DY TOPUP
 -- Compatible with PostgreSQL 14+, Prisma ORM, and Supabase Studio
 -- Project Reference: buielweczgmkgpknmcza
 -- ====================================================================
@@ -124,13 +124,22 @@ ALTER TABLE "Order" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Stock" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Stock" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
 
--- Fill any pre-existing NULL timestamps
-UPDATE "User" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
-UPDATE "User" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
-UPDATE "Product" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
-UPDATE "Product" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
-UPDATE "Package" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
-UPDATE "Package" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+-- Fill any pre-existing NULL timestamps safely
+DO $$
+BEGIN
+    UPDATE "User" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
+    UPDATE "User" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+    UPDATE "Product" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
+    UPDATE "Product" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+    UPDATE "Package" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
+    UPDATE "Package" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+    UPDATE "Order" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
+    UPDATE "Order" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+    UPDATE "Stock" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
+    UPDATE "Stock" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "updatedAt" IS NULL;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
 
 CREATE OR REPLACE FUNCTION set_timestamps()
 RETURNS TRIGGER AS $$
@@ -232,6 +241,7 @@ DELETE FROM "User" WHERE "email" IN ('admin@topup.com', 'admin@gmail.com');
 
 INSERT INTO "User" ("id", "email", "password", "role", "createdAt", "updatedAt")
 VALUES 
+  ('usr_admin_nady_01', 'admin@nadytopup.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('usr_admin_dara_01', 'mdara9695@gmail.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT ("email") DO UPDATE SET "role" = 'ADMIN', "updatedAt" = CURRENT_TIMESTAMP;
 
@@ -242,31 +252,59 @@ ON CONFLICT ("email") DO UPDATE SET "role" = 'ADMIN', "updatedAt" = CURRENT_TIME
 -- 7.1 Mobile Legends: Bang Bang
 INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
 VALUES ('prod_mlbb_001', 'Mobile Legends: Bang Bang', 'mobile-legends', '/images/games/mlbb.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/mlbb.png', "isActive" = true;
+ON CONFLICT ("slug") DO UPDATE SET "image" = EXCLUDED."image", "isActive" = true;
 
 INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_mlbb_01', 'prod_mlbb_001', 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true),
-  ('pkg_mlbb_02', 'prod_mlbb_001', '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_mlbb_03', 'prod_mlbb_001', '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_mlbb_04', 'prod_mlbb_001', '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_mlbb_05', 'prod_mlbb_001', '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true),
-  ('pkg_mlbb_06', 'prod_mlbb_001', '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
+SELECT 'pkg_mlbb_01', p.id, 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_mlbb_02', p.id, '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_mlbb_03', p.id, '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_mlbb_04', p.id, '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_mlbb_05', p.id, '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_mlbb_06', p.id, '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
 ON CONFLICT ("id") DO NOTHING;
 
 -- 7.2 Free Fire
 INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
 VALUES ('prod_ff_002', 'Free Fire', 'free-fire', '/images/games/freefire.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/freefire.png', "isActive" = true;
+ON CONFLICT ("slug") DO UPDATE SET "image" = EXCLUDED."image", "isActive" = true;
 
 INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_ff_01', 'prod_ff_002', 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true),
-  ('pkg_ff_02', 'prod_ff_002', '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_ff_03', 'prod_ff_002', '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_ff_04', 'prod_ff_002', '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_ff_05', 'prod_ff_002', '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true),
-  ('pkg_ff_06', 'prod_ff_002', '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
+SELECT 'pkg_ff_01', p.id, 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_ff_02', p.id, '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_ff_03', p.id, '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_ff_04', p.id, '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_ff_05', p.id, '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
+ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT 'pkg_ff_06', p.id, '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
 ON CONFLICT ("id") DO NOTHING;
 
 -- 7.3 PUBG Mobile
@@ -395,4 +433,24 @@ VALUES
   ('pkg_mc_03', 'prod_mc_011', '500 Diamonds', 500, 7.90, 'NORMAL', 'Bonus 10%', true),
   ('pkg_mc_04', 'prod_mc_011', '1000 Diamonds', 1000, 15.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
 ON CONFLICT ("id") DO NOTHING;
+
+-- ====================================================================
+-- 8. SUPABASE REALTIME CONFIGURATION
+-- ====================================================================
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Order";
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Product";
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE "Package";
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END $$;
+
 

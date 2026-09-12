@@ -10,7 +10,7 @@ interface SecurityChallengeModalProps {
 
 export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeModalProps) {
   const [verifying, setVerifying] = useState(true);
-  const [statusText, setStatusText] = useState('Checking your browser security before accessing DARA-TOPUP...');
+  const [statusText, setStatusText] = useState('Checking your browser security before accessing NA-DY TOPUP...');
   const [error, setError] = useState('');
 
   const solveChallenge = async () => {
@@ -40,8 +40,8 @@ export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeM
 
       if (verifyRes.success && verifyRes.clearanceToken) {
         // Store clearance token in cookie and localStorage
-        document.cookie = `dara_cf_clearance=${verifyRes.clearanceToken}; path=/; max-age=86400; SameSite=Lax`;
-        localStorage.setItem('dara_cf_clearance', verifyRes.clearanceToken);
+        document.cookie = `nady_cf_clearance=${verifyRes.clearanceToken}; path=/; max-age=86400; SameSite=Lax`;
+        localStorage.setItem('nady_cf_clearance', verifyRes.clearanceToken);
         setStatusText('Verification successful! Entering website...');
         setTimeout(() => {
           if (onSuccess) {
@@ -78,9 +78,9 @@ export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeM
 
         {/* Title */}
         <div>
-          <h3 className="text-lg sm:text-xl font-black text-white">DARA Shield DDoS Mitigation</h3>
+          <h3 className="text-lg sm:text-xl font-black text-white">NA-DY Shield DDoS Mitigation</h3>
           <p className="text-xs text-slate-400 mt-1.5">
-            DARA-TOPUP is running under active DDoS protection.
+            NA-DY TOPUP is running under active DDoS protection.
           </p>
         </div>
 
@@ -112,7 +112,7 @@ export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeM
         )}
 
         <div className="text-[10px] text-slate-500">
-          Ray ID: <span className="font-mono text-slate-400">DARA-SHIELD-{Date.now().toString(36).toUpperCase()}</span> • Protected by DARA-TOPUP
+          Ray ID: <span className="font-mono text-slate-400">NADY-SHIELD-{Date.now().toString(36).toUpperCase()}</span> • Protected by NA-DY TOPUP
         </div>
       </div>
     </div>

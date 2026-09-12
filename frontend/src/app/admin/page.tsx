@@ -93,6 +93,46 @@ export default function AdminDashboard() {
   const [editPkgBadge, setEditPkgBadge] = useState('');
   const [editPkgIsActive, setEditPkgIsActive] = useState(true);
 
+  // Quick Add Package to Game Modal State
+  const [addPackageModalProd, setAddPackageModalProd] = useState<GameProduct | null>(null);
+  const [directPkgName, setDirectPkgName] = useState('');
+  const [directPkgAmount, setDirectPkgAmount] = useState('');
+  const [directPkgPrice, setDirectPkgPrice] = useState('');
+  const [directPkgCategory, setDirectPkgCategory] = useState('NORMAL');
+  const [directPkgBadge, setDirectPkgBadge] = useState('');
+
+  const openAddPackageModalForGame = (prod: GameProduct) => {
+    setAddPackageModalProd(prod);
+    setDirectPkgName('');
+    setDirectPkgAmount('');
+    setDirectPkgPrice('');
+    setDirectPkgCategory('NORMAL');
+    setDirectPkgBadge('');
+  };
+
+  const handleSaveDirectPackageModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addPackageModalProd) return;
+    setActionLoading(true); setError(''); setSuccess('');
+    try {
+      await addAdminPackage(
+        addPackageModalProd.id,
+        directPkgName,
+        parseInt(directPkgAmount, 10),
+        parseFloat(directPkgPrice),
+        directPkgCategory,
+        directPkgBadge || undefined
+      );
+      setSuccess(`Package "${directPkgName}" added to ${addPackageModalProd.name} successfully!`);
+      setAddPackageModalProd(null);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to add package');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Product Catalog Search & Filter
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('ALL');
@@ -477,7 +517,7 @@ export default function AdminDashboard() {
             </div>
             {(sidebarOpen || isMobile) && (
               <div className="ml-3 overflow-hidden">
-                <div className="text-white font-black text-sm">𝘿𝘼𝙍𝘼-𝙏𝙊𝙋𝙐𝙋</div>
+                <div className="text-white font-black text-sm">𝘿𝘼𝙍𝘼-𝙎𝙏𝙊𝙍𝙀</div>
                 <div className="text-[10px] text-cyan-400 font-semibold">Admin Panel</div>
               </div>
             )}
@@ -971,6 +1011,14 @@ export default function AdminDashboard() {
                                   <Gem className="h-3 w-3 text-cyan-400" />
                                   <span>Recharge Packages ({prod.packages?.length || 0})</span>
                                 </h5>
+                                <button
+                                  type="button"
+                                  onClick={() => openAddPackageModalForGame(prod)}
+                                  className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[11px] font-bold transition-all shadow-xs"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  <span>Add Package</span>
+                                </button>
                               </div>
 
                               {(!prod.packages || prod.packages.length === 0) ? (
@@ -1282,6 +1330,109 @@ export default function AdminDashboard() {
                         style={btnGrad}
                       >
                         {actionLoading ? 'Saving...' : 'Save Package'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ══ MODAL 3: QUICK ADD PACKAGE TO GAME ══════════════════════ */}
+            {addPackageModalProd && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl relative p-6 text-slate-200 animate-in fade-in zoom-in duration-200">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <Plus className="h-4 w-4 text-cyan-400" />
+                      <span>Add Package to {addPackageModalProd.name}</span>
+                    </h3>
+                    <button
+                      onClick={() => setAddPackageModalProd(null)}
+                      className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveDirectPackageModal} className="space-y-4">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 50 Diamonds, Weekly Pass"
+                        value={directPkgName}
+                        onChange={e => setDirectPkgName(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Amount (Units)</label>
+                        <input
+                          type="number"
+                          required
+                          placeholder="50"
+                          value={directPkgAmount}
+                          onChange={e => setDirectPkgAmount(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Price (USD)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          required
+                          placeholder="0.99"
+                          value={directPkgPrice}
+                          onChange={e => setDirectPkgPrice(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Tier Category</label>
+                        <select
+                          value={directPkgCategory}
+                          onChange={e => setDirectPkgCategory(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs"
+                        >
+                          <option value="NORMAL">Normal</option>
+                          <option value="BEST_SELLER">Best Seller</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Badge (optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 🔥 Popular, VIP"
+                          value={directPkgBadge}
+                          onChange={e => setDirectPkgBadge(e.target.value)}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Submit Actions */}
+                    <div className="pt-3 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setAddPackageModalProd(null)}
+                        className="w-1/2 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={actionLoading}
+                        className="w-1/2 py-2.5 rounded-xl text-white font-bold text-xs shadow-lg"
+                        style={btnGrad}
+                      >
+                        {actionLoading ? 'Adding...' : 'Create Package'}
                       </button>
                     </div>
                   </form>

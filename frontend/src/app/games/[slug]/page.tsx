@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GameIcon from '../../../components/GameIcon';
-import { fetchProduct, lookupNickname, createOrder, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
-import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles } from 'lucide-react';
+import { fetchProduct, createOrder, lookupNickname, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
+import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles, UserCheck, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
@@ -77,21 +77,20 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
   const [product, setProduct] = useState<GameProduct | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<GamePackage | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'ABA' | 'BAKONG' | 'CANADIA'>('BAKONG');
+  const [packageCategoryFilter, setPackageCategoryFilter] = useState<'ALL' | 'DIAMONDS' | 'PASSES' | 'SPECIALS'>('ALL');
   const { t } = useLanguage();
   
   // Player credentials inputs
   const [playerId, setPlayerId] = useState('');
   const [playerZoneId, setPlayerZoneId] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [lastValidNickname, setLastValidNickname] = useState('');
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupError, setLookupError] = useState('');
-  const [lookupSuccess, setLookupSuccess] = useState(false);
+  const [autoNickname, setAutoNickname] = useState('');
+  const [checkingName, setCheckingName] = useState(false);
 
   // Form states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(true);
 
   // Unwrap params
   useEffect(() => {
@@ -104,6 +103,9 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     fetchProduct(slug)
       .then((data) => {
         setProduct(data);
+        if (data.packages && data.packages.length > 0) {
+          setSelectedPackage(data.packages[0]);
+        }
         setLoading(false);
       })
       .catch((err) => {
@@ -113,48 +115,35 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       });
   }, [slug]);
 
-  const handleLookup = async () => {
-    if (!playerId) {
-      setLookupError(t.nicknameRequired);
-      return;
-    }
-    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB && !playerZoneId) {
-      setLookupError(t.zoneIdRequired);
-      return;
-    }
-
-    setLookupError('');
-    setLookupSuccess(false);
-    setLookupLoading(true);
-
-    try {
-      const fetchedNickname = await lookupNickname(slug, playerId, playerZoneId);
-      setNickname(fetchedNickname);
-      setLastValidNickname(fetchedNickname);
-      setLookupSuccess(true);
-    } catch (err: any) {
-      console.warn('ID lookup error:', err);
-      setLookupError(err.message || 'Verification failed');
-      setLookupSuccess(false);
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
-  // Debounced auto-lookup
+  // Automatic Debounced Player Name Verification
   useEffect(() => {
-    if (!slug || !playerId) return;
-    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB) {
-      if (!/^\d{3,10}$/.test(playerId.trim()) || !/^\d{3,10}$/.test(playerZoneId.trim())) return;
-    } else {
-      if (playerId.trim().length < 3) return;
+    const cleanId = playerId.trim();
+    if (!slug || cleanId.length < 3) {
+      setAutoNickname('');
+      setCheckingName(false);
+      return;
     }
 
-    const timer = setTimeout(() => {
-      handleLookup();
-    }, 800);
+    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
+    if (isMLBB && (!playerZoneId.trim() || playerZoneId.trim().length < 3)) {
+      setAutoNickname('');
+      setCheckingName(false);
+      return;
+    }
+
+    setCheckingName(true);
+    const timer = setTimeout(async () => {
+      try {
+        const name = await lookupNickname(slug, cleanId, playerZoneId.trim());
+        if (name) {
+          setAutoNickname(name);
+        }
+      } catch {
+        // Non-blocking auto check
+      } finally {
+        setCheckingName(false);
+      }
+    }, 600);
 
     return () => clearTimeout(timer);
   }, [playerId, playerZoneId, slug]);
@@ -173,18 +162,9 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       setError('Please select a top-up package');
       return;
     }
-
-    const isValidationNeeded = slug === 'free-fire' || slug.startsWith('free-fire-') || isMLBB || slug === 'pubg-mobile' || slug === 'valorant' || slug === 'blood-strike' || slug === 'honor-of-kings' || slug === 'farlight-84' || slug === 'delta-force';
-    if (isValidationNeeded && !lookupSuccess && !lastValidNickname) {
-      try {
-        const fetched = await lookupNickname(slug, playerId, playerZoneId);
-        setNickname(fetched);
-        setLastValidNickname(fetched);
-        setLookupSuccess(true);
-      } catch (err: any) {
-        setError('Please validate your Player ID/Nickname before placing order: ' + (err.message || ''));
-        return;
-      }
+    if (!termsAccepted) {
+      setError('សូមយល់ព្រមលើលក្ខខណ្ឌប្រតិបត្តិ និងគោលការណ៍ទិញមុននឹងបន្ត (Please accept terms & conditions).');
+      return;
     }
 
     setError('');
@@ -200,6 +180,17 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         email
       );
       
+      // If mobile, auto-open ABA Mobile application
+      if (typeof window !== 'undefined' && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        const qr = (res.paymentDetails as any)?.qrCode;
+        const deepLink = (res.paymentDetails as any)?.deepLink || (qr ? `abamobilebank://ababank.com?type=payway&qrcode=${encodeURIComponent(qr)}` : null);
+        if (deepLink) {
+          setTimeout(() => {
+            window.location.href = deepLink;
+          }, 400);
+        }
+      }
+
       // Redirect directly to checkout invoice
       router.push(`/orders/${res.order.paymentTxnId}`);
     } catch (err: any) {
@@ -257,24 +248,24 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         {/* Back Link */}
         <Link 
           href="/" 
-          className="inline-flex items-center space-x-1.5 text-slate-500 hover:text-cyan-600 text-xs font-bold mb-4 sm:mb-6 transition-colors min-h-[36px]"
+          className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-cyan-400 text-xs font-bold mb-4 sm:mb-6 transition-colors min-h-[36px]"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>{t.backToHome}</span>
         </Link>
 
         {/* Game Intro Banner Card */}
-        <div className="glass-panel p-4 sm:p-8 bg-white border-slate-200 shadow-sm mb-6 sm:mb-8 flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6 rounded-2xl sm:rounded-3xl">
-          <div className="shrink-0 h-20 w-20 sm:h-24 sm:w-24 rounded-2xl overflow-hidden border border-slate-200 shadow-xs bg-slate-50">
+        <div className="glass-panel p-4 sm:p-8 bg-slate-900/90 border-slate-800 shadow-xl mb-6 sm:mb-8 flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6 rounded-2xl sm:rounded-3xl">
+          <div className="shrink-0 h-20 w-20 sm:h-24 sm:w-24 rounded-2xl overflow-hidden border border-slate-800 shadow-md bg-slate-950">
             <GameIcon slug={product.slug} name={product.name} image={product.image} className="h-full w-full" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 leading-tight">{product.name}</h1>
-            <p className="text-slate-500 text-xs mt-1.5 flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
+            <h1 className="text-xl sm:text-3xl font-extrabold text-white leading-tight">{product.name}</h1>
+            <p className="text-slate-400 text-xs mt-1.5 flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
               <span>{t.category}:</span>
-              <span className="text-slate-800 uppercase font-bold">{product.category.replace('_', ' ')}</span>
+              <span className="text-slate-200 uppercase font-bold">{product.category.replace('_', ' ')}</span>
               <span>•</span>
-              <span className="text-emerald-600 font-bold">⚡ {t.instantDelivery}</span>
+              <span className="text-emerald-400 font-bold">⚡ {t.instantDelivery}</span>
             </p>
           </div>
         </div>
@@ -285,17 +276,17 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             
             {/* STEP 1: Enter Player ID */}
-            <div className="glass-panel p-4 sm:p-6 bg-white border-slate-200 shadow-xs rounded-2xl sm:rounded-3xl">
+            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-md rounded-2xl sm:rounded-3xl">
               <div className="flex items-center space-x-2 mb-3 sm:mb-4">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-black text-xs shrink-0">
+                <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
                   1
                 </span>
-                <h3 className="text-slate-900 font-extrabold text-sm sm:text-base">{t.enterAccountDetails}</h3>
+                <h3 className="text-white font-extrabold text-sm sm:text-base">{t.enterAccountDetails}</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-slate-700 text-xs font-bold mb-1.5">
+                  <label className="block text-slate-300 text-xs font-bold mb-1.5">
                     {t.playerId}
                   </label>
                   <input
@@ -303,252 +294,297 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                     required
                     placeholder={t.playerId}
                     value={playerId}
-                    onChange={(e) => {
-                      setPlayerId(e.target.value);
-                      setLookupSuccess(false);
-                    }}
-                    className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-cyan-500 min-h-[44px]"
+                    onChange={(e) => setPlayerId(e.target.value)}
+                    className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                   />
                 </div>
 
                 {(product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
                   <div>
-                    <label className="block text-slate-700 text-xs font-bold mb-1.5">
+                    <label className="block text-slate-300 text-xs font-bold mb-1.5">
                       {t.zoneId}
                     </label>
                     <input
                       type="text"
                       placeholder="e.g. 1234"
                       value={playerZoneId}
-                      onChange={(e) => {
-                        setPlayerZoneId(e.target.value);
-                        setLookupSuccess(false);
-                      }}
-                      className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:border-cyan-500 min-h-[44px]"
+                      onChange={(e) => setPlayerZoneId(e.target.value)}
+                      className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                     />
                   </div>
                 )}
               </div>
 
-              {/* Verify Nickname button & status indicator */}
-              {(product.slug === 'free-fire' || product.slug.startsWith('free-fire-') || product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-') || product.slug === 'pubg-mobile' || product.slug === 'valorant' || product.slug === 'blood-strike' || product.slug === 'honor-of-kings' || product.slug === 'farlight-84' || product.slug === 'delta-force') && (
-                <div className="mt-4 pt-3 sm:pt-4 border-t border-slate-100 flex flex-wrap items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={handleLookup}
-                    disabled={lookupLoading}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-xs min-h-[44px] flex items-center justify-center"
-                  >
-                    {lookupLoading ? `${t.verifying}...` : 'ផ្ទៀងផ្ទាត់ឈ្មោះអ្នកលេង'}
-                  </button>
+              {/* Automatic Nickname Indicator */}
+              {checkingName && (
+                <div className="mt-3 flex items-center space-x-2 bg-blue-950/60 border border-blue-800/80 rounded-xl px-3.5 py-2 animate-pulse">
+                  <div className="h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                  <span className="text-blue-300 font-bold text-xs">កំពុងស្វែងរកឈ្មោះស្វ័យប្រវត្តិ...</span>
+                </div>
+              )}
 
-                  {lookupSuccess && nickname && (
-                    <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 min-h-[44px]">
-                      <CheckCircle className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-                      <div className="flex flex-col text-left">
-                        <span className="text-[8px] text-emerald-600 font-bold uppercase tracking-wider">បានបញ្ជាក់</span>
-                        <strong className="text-slate-900 font-black text-xs">{nickname}</strong>
-                      </div>
-                    </div>
-                  )}
-
-                  {lookupError && !lookupLoading && (
-                    <span className="text-red-500 text-xs font-semibold py-1">
-                      ⚠️ {lookupError}
-                    </span>
-                  )}
+              {!checkingName && autoNickname && (
+                <div className="mt-3 flex items-center space-x-2.5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl px-3.5 py-2.5 shadow-xs">
+                  <div className="h-6 w-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0">
+                    <CheckCircle className="h-4 w-4 stroke-[2.5]" />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">ឈ្មោះគណនី (Verified Nickname)</span>
+                    <strong className="text-white font-extrabold text-xs sm:text-sm">{autoNickname}</strong>
+                  </div>
                 </div>
               )}
             </div>
 
             {/* STEP 2: Select Package */}
-            <div className="glass-panel p-4 sm:p-6 bg-white border-slate-200 shadow-xs rounded-2xl sm:rounded-3xl">
-              <div className="flex items-center space-x-2 mb-4 sm:mb-6">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-black text-xs shrink-0">
-                  2
-                </span>
-                <h3 className="text-slate-900 font-extrabold text-sm sm:text-base">{t.selectRechargePackage}</h3>
+            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-md rounded-2xl sm:rounded-3xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+                <div className="flex items-center space-x-2">
+                  <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
+                    2
+                  </span>
+                  <h3 className="text-white font-extrabold text-sm sm:text-base">{t.selectRechargePackage}</h3>
+                </div>
+
+                {/* Package Category Filter Tabs (Working on phone & computer) */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setPackageCategoryFilter('ALL')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      packageCategoryFilter === 'ALL'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    All Packages
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPackageCategoryFilter('DIAMONDS')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      packageCategoryFilter === 'DIAMONDS'
+                        ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    💎 Diamonds
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPackageCategoryFilter('PASSES')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      packageCategoryFilter === 'PASSES'
+                        ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    🔥 Passes / VIP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPackageCategoryFilter('SPECIALS')}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                      packageCategoryFilter === 'SPECIALS'
+                        ? 'bg-violet-500 text-white shadow-md font-black'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    ⚡ Specials
+                  </button>
+                </div>
               </div>
 
-              {/* Best Seller Section */}
-              {product.packages.filter(p => p.category === 'BEST_SELLER').length > 0 && (
-                <div className="mb-5 sm:mb-6">
-                  <h4 className="text-[#f59e0b] font-black text-xs uppercase tracking-wider mb-2.5 sm:mb-3.5 flex items-center gap-1.5 select-none">
-                    <span className="animate-pulse">🔥</span> Best Seller Package
-                  </h4>
+              {/* Filtered Packages Grid */}
+              {(() => {
+                const filteredPkgs = product.packages.filter(pkg => {
+                  if (packageCategoryFilter === 'ALL') return true;
+                  const name = pkg.name.toLowerCase();
+                  if (packageCategoryFilter === 'DIAMONDS') {
+                    return !name.includes('pass') && !name.includes('weekly') && !name.includes('monthly') && !name.includes('evo');
+                  }
+                  if (packageCategoryFilter === 'PASSES') {
+                    return pkg.category === 'BEST_SELLER' || name.includes('pass') || name.includes('weekly') || name.includes('monthly') || name.includes('evo') || !!pkg.badge;
+                  }
+                  if (packageCategoryFilter === 'SPECIALS') {
+                    return !!pkg.badge || pkg.category === 'BEST_SELLER' || name.includes('special') || name.includes('lite');
+                  }
+                  return true;
+                });
+
+                if (filteredPkgs.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-slate-500 text-xs">
+                      No packages in this filter category.
+                    </div>
+                  );
+                }
+
+                return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                    {product.packages
-                      .filter(p => p.category === 'BEST_SELLER')
-                      .map((pkg) => {
-                        const isSelected = selectedPackage?.id === pkg.id;
-                        return (
-                          <button
-                            key={pkg.id}
-                            type="button"
-                            onClick={() => setSelectedPackage(pkg)}
-                            className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl text-left border relative overflow-hidden transition-all flex flex-col justify-between min-h-[88px] sm:min-h-[96px] active:scale-[0.98] ${
-                              isSelected
-                                ? 'border-emerald-500 bg-emerald-50/20 shadow-md ring-2 ring-emerald-500/40'
-                                : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-                            }`}
-                          >
-                            {pkg.badge && (
-                              <span className="absolute top-0 right-0 z-10 text-[7px] sm:text-[7.5px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-bl-lg uppercase shadow-xs tracking-wide">
-                                {pkg.badge}
+                    {filteredPkgs.map((pkg) => {
+                      const isSelected = selectedPackage?.id === pkg.id;
+                      return (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => setSelectedPackage(pkg)}
+                          className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-left relative overflow-hidden transition-all flex flex-col justify-between min-h-[96px] sm:min-h-[106px] active:scale-[0.98] cursor-pointer bg-white shadow-md ${
+                            isSelected
+                              ? 'border-2 border-[#00c988] ring-2 ring-[#00c988]/40 shadow-xl shadow-[#00c988]/15 scale-[1.01]'
+                              : 'border-2 border-slate-200 hover:border-[#00c988] hover:shadow-lg'
+                          }`}
+                        >
+                          {pkg.badge && (
+                            <span className="absolute top-0 right-0 z-10 text-[7.5px] sm:text-[8px] font-black bg-gradient-to-r from-red-600 to-orange-500 text-white px-2 py-0.5 rounded-bl-lg uppercase shadow-xs tracking-wide">
+                              {pkg.badge}
+                            </span>
+                          )}
+
+                          <div className="flex items-start justify-between gap-1 w-full text-left">
+                            <div className="font-extrabold text-slate-900 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-1 sm:pr-4">
+                              {pkg.name}
+                            </div>
+                            <div className="shrink-0 scale-90 sm:scale-95 translate-y-0.5">
+                              {getPackageIcon(pkg.name)}
+                            </div>
+                          </div>
+
+                          <div className="text-[#00c988] font-black text-xs sm:text-sm mt-2 flex justify-between items-end">
+                            <span className="font-black text-sm sm:text-base">${pkg.price.toFixed(2)}</span>
+                            {isSelected && (
+                              <span className="text-[8.5px] bg-[#00c988] text-slate-950 font-black px-1.5 py-0.5 rounded-md select-none shadow-xs">
+                                {t.selectedBadge}
                               </span>
                             )}
-
-                            <div className="flex items-start justify-between gap-1 w-full text-left">
-                              <div className="font-extrabold text-slate-900 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-1 sm:pr-4">
-                                {pkg.name}
-                              </div>
-                              <div className="shrink-0 scale-90 sm:scale-95 translate-y-0.5">
-                                {getPackageIcon(pkg.name)}
-                              </div>
-                            </div>
-
-                            <div className="text-[#03c39a] font-black text-xs sm:text-sm mt-2 flex justify-between items-end">
-                              <span>${pkg.price.toFixed(2)}</span>
-                              {isSelected && (
-                                <span className="text-[8px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded-md select-none">
-                                  {t.selectedBadge}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                </div>
-              )}
-
-              {/* Normal Section */}
-              {product.packages.filter(p => p.category !== 'BEST_SELLER').length > 0 && (
-                <div>
-                  <h4 className="text-cyan-600 font-black text-xs uppercase tracking-wider mb-2.5 sm:mb-3.5 flex items-center gap-1.5 select-none">
-                    <Layers className="h-3.5 w-3.5" />
-                    <span>Normal Package</span>
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                    {product.packages
-                      .filter(p => p.category !== 'BEST_SELLER')
-                      .map((pkg) => {
-                        const isSelected = selectedPackage?.id === pkg.id;
-                        return (
-                          <button
-                            key={pkg.id}
-                            type="button"
-                            onClick={() => setSelectedPackage(pkg)}
-                            className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl text-left border relative overflow-hidden transition-all flex flex-col justify-between min-h-[88px] sm:min-h-[96px] active:scale-[0.98] ${
-                              isSelected
-                                ? 'border-emerald-500 bg-emerald-50/20 shadow-md ring-2 ring-emerald-500/40'
-                                : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-                            }`}
-                          >
-                            {pkg.badge && (
-                              <span className="absolute top-0 right-0 z-10 text-[7px] sm:text-[7.5px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded-bl-lg uppercase shadow-xs tracking-wide">
-                                {pkg.badge}
-                              </span>
-                            )}
-
-                            <div className="flex items-start justify-between gap-1 w-full text-left">
-                              <div className="font-extrabold text-slate-900 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-1 sm:pr-4">
-                                {pkg.name}
-                              </div>
-                              <div className="shrink-0 scale-90 sm:scale-95 translate-y-0.5">
-                                {getPackageIcon(pkg.name)}
-                              </div>
-                            </div>
-
-                            <div className="text-[#03c39a] font-black text-xs sm:text-sm mt-2 flex justify-between items-end">
-                              <span>${pkg.price.toFixed(2)}</span>
-                              {isSelected && (
-                                <span className="text-[8px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.2 rounded-md select-none">
-                                  {t.selectedBadge}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
-            {/* STEP 3: Choose Payment Gateway */}
-            <div className="glass-panel p-4 sm:p-6 bg-white border-slate-200 shadow-xs rounded-2xl sm:rounded-3xl">
+            {/* STEP 3: Choose Payment Gateway (Matching Exact User UI Design) */}
+            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-md rounded-2xl sm:rounded-3xl">
               <div className="flex items-center space-x-2 mb-3 sm:mb-4">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-600 font-black text-xs shrink-0">
+                <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
                   3
                 </span>
-                <h3 className="text-slate-900 font-extrabold text-sm sm:text-base">{t.choosePaymentGateway}</h3>
+                <h3 className="text-white font-extrabold text-sm sm:text-base">វិធីបង់ប្រាក់ (Payment Method)</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:gap-4">
-                {/* ABA KHQR */}
+                {/* ABA KHQR Payment Card with Checkmark (White Card Design) */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('BAKONG')}
-                  className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all text-left flex items-center space-x-3 sm:space-x-4 border-cyan-500 bg-cyan-50/50 ring-1 ring-cyan-500/50 shadow-xs min-h-[56px] active:scale-[0.99]"
+                  className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all text-left flex items-center justify-between border-[#00c988] bg-white ring-2 ring-[#00c988]/30 shadow-md min-h-[58px] active:scale-[0.99] cursor-pointer group"
                 >
-                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl overflow-hidden shrink-0 bg-slate-950 p-0.5 flex items-center justify-center shadow-xs">
-                    <img
-                      src="/images/payments/aba-khqr.svg"
-                      alt="ABA KHQR"
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="text-slate-900 font-bold text-xs sm:text-sm">ABA KHQR</h4>
-                      <span className="text-[8px] sm:text-[9px] font-black bg-cyan-100 text-cyan-700 border border-cyan-300 px-1.5 py-0.2 rounded">Instant Scan</span>
+                  <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl overflow-hidden shrink-0 bg-slate-950 p-0.5 flex items-center justify-center border border-slate-800 shadow-xs">
+                      <img
+                        src="/images/payments/aba-khqr.svg"
+                        alt="ABA KHQR"
+                        className="h-full w-full object-contain"
+                      />
                     </div>
-                    <span className="text-slate-500 text-[11px] sm:text-xs leading-tight block mt-0.5 truncate">Scan via ABA Mobile & any KHQR banking app</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="text-slate-900 font-black text-xs sm:text-sm">ABA KHQR</h4>
+                        <span className="text-[8px] sm:text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded">Instant Scan</span>
+                      </div>
+                      <span className="text-slate-500 text-[11px] sm:text-xs leading-tight block mt-0.5 truncate">Scan to pay with any banking app</span>
+                    </div>
+                  </div>
+
+                  {/* Green Checkmark Badge on Right */}
+                  <div className="h-6 w-6 rounded-full bg-emerald-100 border border-emerald-500 flex items-center justify-center text-emerald-600 shrink-0 ml-2 shadow-xs">
+                    <CheckCircle className="h-4 w-4" />
                   </div>
                 </button>
               </div>
             </div>
 
+            {/* ══ TERMS & CONDITIONS AGREEMENT BOX (Matching User Design) ═════ */}
+            <div 
+              onClick={() => setTermsAccepted(!termsAccepted)}
+              className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/40 flex items-center space-x-3 cursor-pointer select-none transition-all shadow-md"
+            >
+              <div className={`h-5 w-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                termsAccepted 
+                  ? 'bg-[#03c39a] text-slate-950 font-black shadow-xs' 
+                  : 'bg-slate-950 border border-slate-700 text-transparent'
+              }`}>
+                {termsAccepted && <span className="text-xs">✓</span>}
+              </div>
+              <p className="text-xs text-slate-300 font-medium leading-relaxed">
+                ខ្ញុំបានអាន និងយល់ព្រមលើ <span className="text-amber-400 font-bold hover:underline">លក្ខខណ្ឌប្រតិបត្តិ</span> និងគោលការណ៍ទិញ។
+              </p>
+            </div>
+
+            {/* ══ IN-PAGE TOTAL PRICE & KHMER ORDER NOW BOX (Matching User Design) ══ */}
+            <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex items-center justify-between shadow-2xl shadow-black/50">
+              <div>
+                <div className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">
+                  TOTAL PRICE
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-[#03c39a] leading-none mt-1">
+                  ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOrderSubmit}
+                disabled={orderSubmitting || !selectedPackage}
+                className="px-6 sm:px-8 py-3 rounded-2xl bg-[#03c39a] hover:bg-[#02b18b] text-slate-950 font-black text-sm sm:text-base flex items-center space-x-1.5 shadow-lg shadow-[#03c39a]/25 transition-all duration-200 active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <span>{orderSubmitting ? 'ដំណើរការ...' : 'បញ្ជាទិញ'}</span>
+                <span className="text-base font-bold">›</span>
+              </button>
+            </div>
+
           </div>
 
-          {/* Column 3: Desktop Summary Sidebar */}
+          {/* Column 3: Desktop Summary Sidebar (Matching Exact User UI Design) */}
           <div className="hidden lg:block space-y-6">
-            <div className="glass-panel p-6 bg-white border-slate-200 shadow-md sticky top-24 rounded-3xl">
-              <h3 className="text-slate-900 font-extrabold text-base border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
-                <ShoppingCart className="h-4.5 w-4.5 text-cyan-600" />
-                <span>{t.orderSummary}</span>
+            <div className="glass-panel p-6 bg-slate-900/90 border border-slate-800 shadow-2xl sticky top-24 rounded-3xl">
+              <h3 className="text-white font-extrabold text-base border-b border-slate-800 pb-3 mb-4 flex items-center space-x-2">
+                <ShoppingCart className="h-5 w-5 text-cyan-400" />
+                <span>សេចក្ដីសង្ខេបនៃការបញ្ជាទិញ</span>
               </h3>
 
               {/* Order Items list details */}
               <div className="space-y-3.5 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">{t.selectedProduct}:</span>
-                  <span className="text-slate-900 font-bold">{product.name}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">ផលិតផលដែលបានជ្រើសរើស:</span>
+                  <span className="text-white font-bold">{product.name}</span>
                 </div>
                 
-                <div className="flex justify-between">
-                  <span className="text-slate-500">{t.packageItem}:</span>
-                  <span className="text-slate-900 font-semibold">{selectedPackage ? selectedPackage.name : 'Not selected'}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">កញ្ចប់ផលិតផល:</span>
+                  <span className="text-white font-bold">{selectedPackage ? selectedPackage.name : 'Not selected'}</span>
                 </div>
 
                 {playerId && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">{t.playerIdDetails}:</span>
-                    <span className="text-slate-900 font-mono font-bold">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-medium">Player ID:</span>
+                    <span className="text-cyan-400 font-mono font-bold">
                       {playerId} {playerZoneId ? `(${playerZoneId})` : ''}
                     </span>
                   </div>
                 )}
 
-                <div className="flex justify-between">
-                  <span className="text-slate-500">{t.paymentGateway}:</span>
-                  <span className="text-slate-900 font-bold">{paymentMethod}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">ច្រកបង់ប្រាក់:</span>
+                  <span className="text-white font-bold uppercase">{paymentMethod === 'BAKONG' ? 'BAKONG' : paymentMethod}</span>
                 </div>
 
-                <div className="border-t border-slate-100 pt-3 flex justify-between items-end">
-                  <span className="text-slate-600 text-sm font-semibold">{t.totalPriceUsd}:</span>
-                  <span className="text-cyan-600 text-xl font-black">
+                <div className="border-t border-slate-800 pt-4 flex justify-between items-end">
+                  <span className="text-slate-200 text-sm font-bold">តម្លៃសរុប (USD):</span>
+                  <span className="text-[#00c988] text-2xl font-black">
                     ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
                   </span>
                 </div>
@@ -556,7 +592,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
               {/* Global Error Banner */}
               {error && (
-                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs leading-relaxed">
+                <div className="mt-4 p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-red-300 text-xs leading-relaxed">
                   {error}
                 </div>
               )}
@@ -566,43 +602,67 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 type="button"
                 onClick={handleOrderSubmit}
                 disabled={orderSubmitting}
-                className="w-full mt-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-black text-sm shadow-md transition-all duration-300 glow-btn disabled:opacity-50 min-h-[44px]"
+                className="w-full mt-6 py-3.5 rounded-2xl bg-[#00c988] hover:bg-[#00b077] text-slate-950 font-black text-sm uppercase shadow-xl shadow-[#00c988]/30 transition-all duration-300 glow-btn disabled:opacity-50 min-h-[48px] flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98"
               >
-                {orderSubmitting ? t.generatingInvoice : t.purchaseTopUp}
+                <span>{orderSubmitting ? 'ដំណើរការ...' : 'បញ្ជាទិញ (TOP UP NOW)'}</span>
+                <span className="text-base font-bold">›</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* ══ MOBILE FLOATING BOTTOM PURCHASE BAR ═════════════════════════ */}
-        <div className="lg:hidden fixed bottom-16 left-0 right-0 z-30 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 shadow-[0_-6px_25px_rgba(0,0,0,0.08)] px-3 sm:px-4 py-2.5">
-          <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider truncate">
-                {selectedPackage ? selectedPackage.name : 'សូមជ្រើសរើសកញ្ចប់'}
+        {/* ══ STICKY FLOATING QUICK-CHECKOUT BAR (Matching User Design) ═════════════════════════ */}
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#060913]/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.7)] px-4 sm:px-8 py-2.5 sm:py-3 select-none">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+            
+            {/* Left: Icon circle + Package info + Glowing Price */}
+            <div className="flex items-center space-x-3.5 min-w-0">
+              {/* Circle Avatar Icon with subtle ring */}
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 shadow-inner">
+                <span className="font-black text-sm text-cyan-400 select-none">N</span>
               </div>
-              <div className="text-lg font-black text-cyan-600">
-                ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
+
+              {/* Name & Glowing Price */}
+              <div className="min-w-0 flex flex-col justify-center">
+                <div className="text-[11px] sm:text-xs text-slate-200 font-extrabold uppercase tracking-wider truncate max-w-[180px] sm:max-w-xs">
+                  {selectedPackage ? selectedPackage.name : 'សូមជ្រើសរើសកញ្ចប់'}
+                </div>
+                <div className="text-base sm:text-xl font-black text-[#00c988] leading-tight">
+                  ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
+                </div>
               </div>
             </div>
 
+            {/* Right: TOP UP NOW / បញ្ជាទិញ Button */}
             <button
               type="button"
               onClick={handleOrderSubmit}
               disabled={orderSubmitting || !selectedPackage}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-black text-xs sm:text-sm shadow-md transition-all duration-200 glow-btn disabled:opacity-50 min-h-[44px] flex items-center justify-center shrink-0 active:scale-95"
+              className="px-6 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-[#00c988] hover:bg-[#00b077] text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-[#00c988]/30 transition-all duration-200 disabled:opacity-50 min-h-[44px] flex items-center justify-center space-x-1.5 shrink-0 active:scale-95 cursor-pointer"
             >
-              {orderSubmitting ? 'Processing...' : 'TOP UP NOW ⚡'}
+              <span>{orderSubmitting ? 'ដំណើរការ...' : 'បញ្ជាទិញ'}</span>
+              <span className="text-base font-bold">›</span>
             </button>
           </div>
 
-          {/* Quick mobile error display if any */}
+          {/* Quick error banner if validation fails */}
           {error && (
-            <div className="max-w-md mx-auto mt-2 text-[10px] text-red-600 font-bold bg-red-50 p-1.5 rounded-lg border border-red-200 text-center">
+            <div className="max-w-md mx-auto mt-2 text-[10px] text-red-400 font-bold bg-red-950/80 p-1.5 rounded-lg border border-red-800 text-center">
               ⚠️ {error}
             </div>
           )}
         </div>
+
+        {/* ══ FLOATING TELEGRAM LIVE SUPPORT BUBBLE (Bottom-Right) ══════════════ */}
+        <a
+          href="https://t.me/darazzdev"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Chat with Support on Telegram"
+          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40 h-12 w-12 rounded-full bg-[#229ED9] hover:bg-[#198fca] text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-110 active:scale-95 cursor-pointer group"
+        >
+          <Send className="h-5 w-5 fill-current -rotate-12 group-hover:scale-110 transition-transform" />
+        </a>
       </main>
 
       <Footer />

@@ -5,16 +5,11 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import { loginWithGoogle, login, register } from '../../lib/api';
+import { loginWithGoogle } from '../../lib/api';
 import {
   Gamepad2,
   AlertCircle,
   CheckCircle2,
-  Mail,
-  Lock,
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
   Loader2,
 } from 'lucide-react';
 
@@ -31,15 +26,8 @@ declare global {
 export default function LoginPage() {
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [emailLoading, setEmailLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  // Email / Password accordion state
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   // Centralized authentication success handler
   const handleAuthSuccess = (data: any) => {
@@ -219,29 +207,6 @@ export default function LoginPage() {
     openGoogleOAuthDirect();
   };
 
-  // Email / Password login submission
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setEmailLoading(true);
-
-    try {
-      let data;
-      if (isRegister) {
-        data = await register(email.trim(), password);
-      } else {
-        data = await login(email.trim(), password);
-      }
-      handleAuthSuccess(data);
-    } catch (err: any) {
-      console.error('Email authentication error:', err);
-      setError(err.message || 'Invalid email or password');
-    } finally {
-      setEmailLoading(false);
-    }
-  };
-
   return (
     <>
       <Script
@@ -259,7 +224,7 @@ export default function LoginPage() {
               <Gamepad2 className="h-7 w-7" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-              Welcome to DARA-TOPUP
+              Welcome to NA-DY TOPUP
             </h2>
             <p className="text-slate-500 text-xs sm:text-sm mt-1.5 max-w-xs mx-auto">
               Sign in with your Google account to access your recharge orders and top-up dashboard.
@@ -287,8 +252,8 @@ export default function LoginPage() {
               type="button"
               id="google-custom-btn"
               onClick={handleCustomGoogleClick}
-              disabled={googleLoading || emailLoading}
-              className="w-full flex items-center justify-center space-x-3 py-3 px-5 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-cyan-400 rounded-2xl text-slate-800 font-black text-sm sm:text-base transition-all shadow-md hover:shadow-cyan-500/10 active:scale-[0.99] disabled:opacity-50 min-h-[50px] cursor-pointer"
+              disabled={googleLoading}
+              className="w-full flex items-center justify-center space-x-3 py-3.5 px-5 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-cyan-400 rounded-2xl text-slate-800 font-black text-sm sm:text-base transition-all shadow-md hover:shadow-cyan-500/10 active:scale-[0.99] disabled:opacity-50 min-h-[50px] cursor-pointer"
             >
               {googleLoading ? (
                 <>
@@ -322,97 +287,6 @@ export default function LoginPage() {
 
             {/* Official GSI Button Container (Alternative 1-tap option) */}
             <div id="google-btn-native" className="flex justify-center my-1"></div>
-          </div>
-
-          {/* Email / Password Toggle */}
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setShowEmailLogin(!showEmailLogin);
-                setError('');
-              }}
-              className="w-full flex items-center justify-between py-2 text-xs font-bold text-slate-500 hover:text-cyan-600 transition-colors"
-            >
-              <span>{showEmailLogin ? 'Hide email sign in' : 'Or sign in with email & password'}</span>
-              {showEmailLogin ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
-
-            {showEmailLogin && (
-              <form onSubmit={handleEmailSubmit} className="mt-3 space-y-3">
-                <div>
-                  <label className="block text-slate-700 text-xs font-bold mb-1" htmlFor="email">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input
-                      id="email"
-                      type="email"
-                      required
-                      placeholder="mdara9695@gmail.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 text-xs font-bold mb-1" htmlFor="password">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input
-                      id="password"
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={emailLoading || googleLoading}
-                  className="w-full flex items-center justify-center space-x-1.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-600 hover:to-violet-600 text-white font-bold text-xs sm:text-sm shadow-md transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {emailLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verifying...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>{isRegister ? 'Create Account' : 'Sign In'}</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
-
-                <div className="text-center pt-1 text-[11px] text-slate-500">
-                  {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRegister(!isRegister);
-                      setError('');
-                    }}
-                    className="text-cyan-600 font-bold hover:underline"
-                  >
-                    {isRegister ? 'Sign In' : 'Create One'}
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
 
           {/* Support Link */}
