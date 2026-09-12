@@ -1,10 +1,10 @@
 -- ====================================================================
--- NA-DY TOPUP - COMPLETE SYSTEM SUPABASE SQL (ALL GAMES & PACKAGES)
+-- NA-DY TOPUP - COMPLETE MASTER DATABASE SYSTEM SCHEMA FOR SUPABASE
 -- Compatible with PostgreSQL 14+, Supabase Cloud, and Prisma ORM
 -- Project Reference: ueziueclbgymbynuxpby
 -- ====================================================================
 
--- 1. Enable Required Extensions
+-- 1. Enable Required PostgreSQL Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 2. CREATE SYSTEM TABLES
 -- ====================================================================
 
--- 2.1 User Table
+-- 2.1 User Table (Customers & Administrators)
 CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "email" TEXT NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "User" (
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2.2 Product Table (All Games & Digital Vouchers)
+-- 2.2 Product Table (Games, Gift Cards & Digital Vouchers)
 CREATE TABLE IF NOT EXISTS "Product" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "name" TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS "Product" (
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2.3 Package Table (Item Bundles / Diamond Top-Up Tiers)
+-- 2.3 Package Table (Diamond Tiers & Recharge Bundles)
 CREATE TABLE IF NOT EXISTS "Package" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "productId" TEXT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS "Package" (
     CONSTRAINT "Package_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- 2.4 Order Table (Top-Up Transactions & KHQR Invoices)
+-- 2.4 Order Table (Top-Up Transactions & Invoices)
 CREATE TABLE IF NOT EXISTS "Order" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "userId" TEXT,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS "Order" (
     CONSTRAINT "Order_packageId_fkey" FOREIGN KEY ("packageId") REFERENCES "Package"("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
--- 2.5 Stock Table (Digital Voucher Serial Codes)
+-- 2.5 Stock Table (Digital Voucher Serial Codes & Gift Keys)
 CREATE TABLE IF NOT EXISTS "Stock" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "packageId" TEXT NOT NULL,
@@ -84,6 +84,23 @@ CREATE TABLE IF NOT EXISTS "Stock" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Stock_packageId_fkey" FOREIGN KEY ("packageId") REFERENCES "Package"("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- 2.6 SystemSetting Table (Global Website Settings & Tickers)
+CREATE TABLE IF NOT EXISTS "SystemSetting" (
+    "key" TEXT PRIMARY KEY,
+    "value" TEXT NOT NULL,
+    "description" TEXT,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2.7 AuditLog Table (Security & Transaction Activity Logs)
+CREATE TABLE IF NOT EXISTS "AuditLog" (
+    "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
+    "action" TEXT NOT NULL,
+    "performedBy" TEXT,
+    "details" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ====================================================================
@@ -103,6 +120,7 @@ CREATE INDEX IF NOT EXISTS "idx_order_paymentStatus" ON "Order"("paymentStatus")
 CREATE INDEX IF NOT EXISTS "idx_order_createdAt" ON "Order"("createdAt" DESC);
 CREATE INDEX IF NOT EXISTS "idx_stock_packageId" ON "Stock"("packageId");
 CREATE INDEX IF NOT EXISTS "idx_stock_isUsed" ON "Stock"("isUsed");
+CREATE INDEX IF NOT EXISTS "idx_auditlog_createdAt" ON "AuditLog"("createdAt" DESC);
 
 -- ====================================================================
 -- 4. AUTOMATIC TIMESTAMP TRIGGERS & DEFAULTS
@@ -171,12 +189,14 @@ ALTER TABLE "Package" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Order" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Stock" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "SystemSetting" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "AuditLog" ENABLE ROW LEVEL SECURITY;
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, service_role;
-GRANT SELECT ON "Product", "Package" TO anon, authenticated;
+GRANT SELECT ON "Product", "Package", "SystemSetting" TO anon, authenticated;
 GRANT SELECT, INSERT ON "Order" TO anon, authenticated;
 
 DROP POLICY IF EXISTS "Public can view active products" ON "Product";
@@ -184,6 +204,9 @@ CREATE POLICY "Public can view active products" ON "Product" FOR SELECT TO anon,
 
 DROP POLICY IF EXISTS "Public can view active packages" ON "Package";
 CREATE POLICY "Public can view active packages" ON "Package" FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS "Public can view system settings" ON "SystemSetting";
+CREATE POLICY "Public can view system settings" ON "SystemSetting" FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Public can create orders" ON "Order";
 CREATE POLICY "Public can create orders" ON "Order" FOR INSERT TO anon, authenticated WITH CHECK (true);
@@ -209,18 +232,33 @@ CREATE POLICY "Service role bypass Order" ON "Order" FOR ALL TO service_role USI
 DROP POLICY IF EXISTS "Service role bypass Stock" ON "Stock";
 CREATE POLICY "Service role bypass Stock" ON "Stock" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Service role bypass SystemSetting" ON "SystemSetting";
+CREATE POLICY "Service role bypass SystemSetting" ON "SystemSetting" FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Service role bypass AuditLog" ON "AuditLog";
+CREATE POLICY "Service role bypass AuditLog" ON "AuditLog" FOR ALL TO service_role USING (true) WITH CHECK (true);
+
 -- ====================================================================
--- 6. DEFAULT ADMINISTRATOR ACCOUNTS SEED
--- Passwords encrypted with bcrypt for 'admin123'
+-- 6. DEFAULT ADMINISTRATOR & SYSTEM SETTINGS SEED
 -- ====================================================================
 
+-- 6.1 Administrator Accounts
 DELETE FROM "User" WHERE "email" IN ('admin@topup.com', 'admin@gmail.com');
 
 INSERT INTO "User" ("id", "email", "password", "role", "createdAt", "updatedAt")
 VALUES 
-  ('usr_admin_nady_01', 'admin@nadytopup.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('usr_admin_dara_01', 'mdara9695@gmail.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ('usr_admin_dara_01', 'mdara9695@gmail.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('usr_admin_nady_01', 'admin@nadytopup.com', '$2a$10$6MJi2ySmEqnKRa4Avtad1en6loFyWVZTvt7hOp5BFC7PR8g.C08Qm', 'ADMIN', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT ("email") DO UPDATE SET "role" = 'ADMIN', "updatedAt" = CURRENT_TIMESTAMP;
+
+-- 6.2 Global System Settings
+INSERT INTO "SystemSetting" ("key", "value", "description")
+VALUES
+  ('BRAND_NAME', 'NA-DY TOPUP', 'Official Brand Name'),
+  ('ANNOUNCEMENT_TEXT', '🎉 សូមស្វាគមន៍មកកាន់ NA-DY TOPUP! បញ្ចូលពេជ្រលឿនរហ័ស 24/7 តាមរយៈ ABA & Bakong KHQR!', 'Announcement ticker banner text'),
+  ('STORE_STATUS', 'ONLINE', 'Store Operational Status: ONLINE / MAINTENANCE'),
+  ('CONTACT_TELEGRAM', '@nadytopup_support', 'Official Telegram Support')
+ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "updatedAt" = CURRENT_TIMESTAMP;
 
 -- ====================================================================
 -- 7. ALL GAMES & DIGITAL PRODUCTS CATALOG SEED (100% COMPLETE CATALOG)
@@ -563,16 +601,8 @@ WHERE NOT EXISTS (SELECT 1 FROM "Package" pkg WHERE pkg."productId" = p.id);
 -- ====================================================================
 DO $$
 BEGIN
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE "Order";
-  EXCEPTION WHEN OTHERS THEN NULL;
-  END;
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE "Product";
-  EXCEPTION WHEN OTHERS THEN NULL;
-  END;
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE "Package";
-  EXCEPTION WHEN OTHERS THEN NULL;
-  END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE "Order"; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE "Product"; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE "Package"; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE "SystemSetting"; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
