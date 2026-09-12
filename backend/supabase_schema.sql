@@ -1,7 +1,7 @@
 -- ====================================================================
 -- SUPABASE FULL DATABASE SYSTEM SCHEMA FOR NA-DY TOPUP
 -- Compatible with PostgreSQL 14+, Prisma ORM, and Supabase Studio
--- Project Reference: buielweczgmkgpknmcza
+-- Project Reference: ueziueclbgymbynuxpby
 -- ====================================================================
 
 -- 1. Enable Required Extensions
