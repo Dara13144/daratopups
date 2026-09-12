@@ -15,7 +15,7 @@ import {
 
 const GOOGLE_CLIENT_ID =
   process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-  '212551130685-hln5k9en81aq0d2884l8qk9v38ocb6rq.apps.googleusercontent.com';
+  '206329302084-7h656a65vmoeusu10c0cor9lvbp3042v.apps.googleusercontent.com';
 
 declare global {
   interface Window {
