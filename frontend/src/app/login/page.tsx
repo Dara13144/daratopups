@@ -96,20 +96,35 @@ export default function LoginPage() {
   useEffect(() => {
     initializeGoogleGSI();
 
-    // Catch OAuth direct redirect tokens from URL hash (#access_token=...)
-    if (typeof window !== 'undefined' && window.location.hash) {
+    // Catch OAuth direct redirect tokens from URL hash (#access_token=... or ?access_token=...)
+    if (typeof window !== 'undefined') {
       const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
+      const search = window.location.search.substring(1);
+      const params = new URLSearchParams(hash || search);
       const accessToken = params.get('access_token');
-      if (accessToken) {
+      const idToken = params.get('id_token');
+      const token = accessToken || idToken;
+
+      if (token) {
+        // If opened inside popup window, send message to parent window
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage({ type: 'GOOGLE_OAUTH_TOKEN', token }, window.location.origin);
+            window.close();
+            return;
+          } catch (e) {
+            console.warn('Popup postMessage warning:', e);
+          }
+        }
+
         window.history.replaceState(null, '', window.location.pathname);
         setGoogleLoading(true);
         fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${token}` },
         })
           .then((res) => res.json())
           .then(async (userInfo) => {
-            const data = await loginWithGoogle(accessToken, userInfo.email, userInfo.name);
+            const data = await loginWithGoogle(token, userInfo.email, userInfo.name || userInfo.given_name);
             handleAuthSuccess(data);
           })
           .catch((err) => {
@@ -117,6 +132,29 @@ export default function LoginPage() {
             setGoogleLoading(false);
           });
       }
+
+      // Listen for popup messages from child window
+      const handlePopupMessage = async (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'GOOGLE_OAUTH_TOKEN' && event.data.token) {
+          const popupToken = event.data.token;
+          setGoogleLoading(true);
+          try {
+            const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${popupToken}` },
+            });
+            const userInfo = await userRes.json();
+            const data = await loginWithGoogle(popupToken, userInfo.email, userInfo.name || userInfo.given_name);
+            handleAuthSuccess(data);
+          } catch (err: any) {
+            setError(err.message || 'Failed to authenticate Google token from popup');
+            setGoogleLoading(false);
+          }
+        }
+      };
+
+      window.addEventListener('message', handlePopupMessage);
+      return () => window.removeEventListener('message', handlePopupMessage);
     }
   }, []);
 
@@ -125,13 +163,16 @@ export default function LoginPage() {
     if (typeof window === 'undefined') return;
     setGoogleLoading(true);
     const redirectUri = window.location.origin + '/login';
+    const state = 'oauth_state_' + Math.random().toString(36).substring(2, 15);
+    try { sessionStorage.setItem('oauth_state', state); } catch {}
+
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
       GOOGLE_CLIENT_ID
     )}&redirect_uri=${encodeURIComponent(
       redirectUri
     )}&response_type=token&scope=${encodeURIComponent(
       'openid email profile'
-    )}&prompt=select_account`;
+    )}&state=${encodeURIComponent(state)}&prompt=select_account`;
 
     const width = 500;
     const height = 620;
