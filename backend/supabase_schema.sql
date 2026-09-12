@@ -4,12 +4,12 @@
 -- Project Reference: ueziueclbgymbynuxpby
 -- ====================================================================
 
--- 1. Enable Required Extensions
+-- 1. Enable Required PostgreSQL Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ====================================================================
--- 2. CREATE TABLES
+-- 2. CREATE DATABASE TABLES
 -- ====================================================================
 
 -- 2.1 User Table
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "User" (
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2.2 Product Table (Games & Digital Services)
+-- 2.2 Product Table (Games, Vouchers, Digital Services)
 CREATE TABLE IF NOT EXISTS "Product" (
     "id" TEXT PRIMARY KEY DEFAULT ('c' || substr(md5(random()::text || clock_timestamp()::text), 1, 24)),
     "name" TEXT NOT NULL,
@@ -105,26 +105,20 @@ CREATE INDEX IF NOT EXISTS "idx_stock_packageId" ON "Stock"("packageId");
 CREATE INDEX IF NOT EXISTS "idx_stock_isUsed" ON "Stock"("isUsed");
 
 -- ====================================================================
--- 4. AUTOMATIC createdAt & updatedAt TIMESTAMP TRIGGERS & DEFAULTS
+-- 4. AUTOMATIC TIMESTAMP TRIGGERS & DEFAULTS
 -- ====================================================================
 
--- Ensure defaults exist even on pre-existing tables
 ALTER TABLE "User" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "User" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
-
 ALTER TABLE "Product" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Product" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
-
 ALTER TABLE "Package" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Package" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
-
 ALTER TABLE "Order" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Order" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
-
 ALTER TABLE "Stock" ALTER COLUMN "createdAt" SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Stock" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;
 
--- Fill any pre-existing NULL timestamps safely
 DO $$
 BEGIN
     UPDATE "User" SET "createdAt" = CURRENT_TIMESTAMP WHERE "createdAt" IS NULL;
@@ -158,23 +152,18 @@ BEGIN
 END;
 $$ LANGUAGE 'plpgsql';
 
-DROP TRIGGER IF EXISTS set_user_updated_at ON "User";
 DROP TRIGGER IF EXISTS set_user_timestamps ON "User";
 CREATE TRIGGER set_user_timestamps BEFORE INSERT OR UPDATE ON "User" FOR EACH ROW EXECUTE FUNCTION set_timestamps();
 
-DROP TRIGGER IF EXISTS set_product_updated_at ON "Product";
 DROP TRIGGER IF EXISTS set_product_timestamps ON "Product";
 CREATE TRIGGER set_product_timestamps BEFORE INSERT OR UPDATE ON "Product" FOR EACH ROW EXECUTE FUNCTION set_timestamps();
 
-DROP TRIGGER IF EXISTS set_package_updated_at ON "Package";
 DROP TRIGGER IF EXISTS set_package_timestamps ON "Package";
 CREATE TRIGGER set_package_timestamps BEFORE INSERT OR UPDATE ON "Package" FOR EACH ROW EXECUTE FUNCTION set_timestamps();
 
-DROP TRIGGER IF EXISTS set_order_updated_at ON "Order";
 DROP TRIGGER IF EXISTS set_order_timestamps ON "Order";
 CREATE TRIGGER set_order_timestamps BEFORE INSERT OR UPDATE ON "Order" FOR EACH ROW EXECUTE FUNCTION set_timestamps();
 
-DROP TRIGGER IF EXISTS set_stock_updated_at ON "Stock";
 DROP TRIGGER IF EXISTS set_stock_timestamps ON "Stock";
 CREATE TRIGGER set_stock_timestamps BEFORE INSERT OR UPDATE ON "Stock" FOR EACH ROW EXECUTE FUNCTION set_timestamps();
 
@@ -182,14 +171,12 @@ CREATE TRIGGER set_stock_timestamps BEFORE INSERT OR UPDATE ON "Stock" FOR EACH 
 -- 5. ROW LEVEL SECURITY (RLS) POLICIES & SCHEMA GRANTS
 -- ====================================================================
 
--- Enable RLS on all tables
 ALTER TABLE "Product" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Package" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Order" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Stock" ENABLE ROW LEVEL SECURITY;
 
--- Grants for standard Supabase API roles
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
@@ -197,25 +184,21 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, service_role;
 GRANT SELECT ON "Product", "Package" TO anon, authenticated;
 GRANT SELECT, INSERT ON "Order" TO anon, authenticated;
 
--- Products & Packages: Public read access
 DROP POLICY IF EXISTS "Public can view active products" ON "Product";
 CREATE POLICY "Public can view active products" ON "Product" FOR SELECT TO anon, authenticated USING (true);
 
 DROP POLICY IF EXISTS "Public can view active packages" ON "Package";
 CREATE POLICY "Public can view active packages" ON "Package" FOR SELECT TO anon, authenticated USING (true);
 
--- Orders: Public can create orders (guest checkout supported) and view orders
 DROP POLICY IF EXISTS "Public can create orders" ON "Order";
 CREATE POLICY "Public can create orders" ON "Order" FOR INSERT TO anon, authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Public can view orders" ON "Order";
 CREATE POLICY "Public can view orders" ON "Order" FOR SELECT TO anon, authenticated USING (true);
 
--- Users: Authenticated users can view their own profile
 DROP POLICY IF EXISTS "Users can view own profile" ON "User";
 CREATE POLICY "Users can view own profile" ON "User" FOR SELECT TO authenticated USING (auth.uid()::text = id OR email = (auth.jwt() ->> 'email'));
 
--- Backend Service Role has full unrestricted access to everything
 DROP POLICY IF EXISTS "Service role bypass User" ON "User";
 CREATE POLICY "Service role bypass User" ON "User" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -233,10 +216,9 @@ CREATE POLICY "Service role bypass Stock" ON "Stock" FOR ALL TO service_role USI
 
 -- ====================================================================
 -- 6. DEFAULT ADMINISTRATOR SEED
--- Passwords are encrypted with bcrypt for 'admin123'
+-- Passwords encrypted with bcrypt for 'admin123'
 -- ====================================================================
 
--- Delete legacy administrator accounts
 DELETE FROM "User" WHERE "email" IN ('admin@topup.com', 'admin@gmail.com');
 
 INSERT INTO "User" ("id", "email", "password", "role", "createdAt", "updatedAt")
@@ -246,196 +228,217 @@ VALUES
 ON CONFLICT ("email") DO UPDATE SET "role" = 'ADMIN', "updatedAt" = CURRENT_TIMESTAMP;
 
 -- ====================================================================
--- 7. TOP GAMES CATALOG & DEFAULT PACKAGES SEED
+-- 7. ALL GAMES & DIGITAL PRODUCTS CATALOG SEED (100% Comprehensive)
 -- ====================================================================
 
--- 7.1 Mobile Legends: Bang Bang
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_mlbb_001', 'Mobile Legends: Bang Bang', 'mobile-legends', '/images/games/mlbb.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = EXCLUDED."image", "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_01', p.id, 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_02', p.id, '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_03', p.id, '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_04', p.id, '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_05', p.id, '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_mlbb_06', p.id, '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'mobile-legends' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.2 Free Fire
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_ff_002', 'Free Fire', 'free-fire', '/images/games/freefire.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = EXCLUDED."image", "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_01', p.id, 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_02', p.id, '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_03', p.id, '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_04', p.id, '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_05', p.id, '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-SELECT 'pkg_ff_06', p.id, '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'free-fire' LIMIT 1
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.3 PUBG Mobile
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_pubg_003', 'PUBG Mobile', 'pubg-mobile', '/images/games/pubgm.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/pubgm.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_pubg_01', 'prod_pubg_003', '60 UC', 60, 0.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_pubg_02', 'prod_pubg_003', '325 UC (300 + 25 Bonus)', 325, 4.85, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_pubg_03', 'prod_pubg_003', '660 UC (600 + 60 Bonus)', 660, 9.60, 'NORMAL', 'Royale Pass', true),
-  ('pkg_pubg_04', 'prod_pubg_003', '1800 UC (1500 + 300 Bonus)', 1800, 23.90, 'NORMAL', 'Bonus 20%', true),
-  ('pkg_pubg_05', 'prod_pubg_003', '3850 UC (3000 + 850 Bonus)', 3850, 47.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.4 Honor of Kings
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_hok_004', 'Honor of Kings', 'honor-of-kings', '/images/games/hok.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/hok.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_hok_01', 'prod_hok_004', '80 Tokens (+8 Bonus)', 88, 0.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_hok_02', 'prod_hok_004', '240 Tokens (+24 Bonus)', 264, 2.99, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_hok_03', 'prod_hok_004', '400 Tokens (+40 Bonus)', 440, 4.85, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_hok_04', 'prod_hok_004', '800 Tokens (+95 Bonus)', 895, 9.70, 'NORMAL', 'Bonus 12%', true),
-  ('pkg_hok_05', 'prod_hok_004', '2400 Tokens (+300 Bonus)', 2700, 28.90, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.5 Genshin Impact
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_genshin_005', 'Genshin Impact', 'genshin-impact', '/images/games/genshin-impact.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/genshin-impact.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_gen_01', 'prod_genshin_005', 'Blessing of the Welkin Moon', 1, 4.99, 'BEST_SELLER', 'Best Value 🌙', true),
-  ('pkg_gen_02', 'prod_genshin_005', '300 + 30 Genesis Crystals', 330, 4.90, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_gen_03', 'prod_genshin_005', '980 + 110 Genesis Crystals', 1090, 14.80, 'NORMAL', 'Bonus 11%', true),
-  ('pkg_gen_04', 'prod_genshin_005', '1980 + 260 Genesis Crystals', 2240, 29.50, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_gen_05', 'prod_genshin_005', '3280 + 600 Genesis Crystals', 3880, 48.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.6 Roblox
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_roblox_006', 'Roblox', 'roblox', '/images/games/roblox.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/roblox.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_rbx_01', 'prod_roblox_006', '80 Robux', 80, 0.99, 'BEST_SELLER', 'Fast ⚡', true),
-  ('pkg_rbx_02', 'prod_roblox_006', '400 Robux', 400, 4.85, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_rbx_03', 'prod_roblox_006', '800 Robux', 800, 9.60, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_rbx_04', 'prod_roblox_006', '1700 Robux', 1700, 19.80, 'NORMAL', 'Bonus 15%', true),
-  ('pkg_rbx_05', 'prod_roblox_006', '4500 Robux', 4500, 49.00, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.7 Valorant
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_val_007', 'Valorant', 'valorant', '/images/games/valorant.png', 'PC_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/valorant.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_val_01', 'prod_val_007', '475 Valorant Points (VP)', 475, 4.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_val_02', 'prod_val_007', '1000 Valorant Points (VP)', 1000, 9.99, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_val_03', 'prod_val_007', '2050 Valorant Points (VP)', 2050, 19.80, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_val_04', 'prod_val_007', '3650 Valorant Points (VP)', 3650, 34.50, 'NORMAL', 'Bonus 10%', true),
-  ('pkg_val_05', 'prod_val_007', '5350 Valorant Points (VP)', 5350, 49.00, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.8 Mobile Legends Khmer Regional
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_mlbb_kh_008', 'MOBILE LEGENDS | KHMER', 'mobile-legends-khmer', '/images/games/mlbb.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/mlbb.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_mlbb_kh_01', 'prod_mlbb_kh_008', 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true),
-  ('pkg_mlbb_kh_02', 'prod_mlbb_kh_008', '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_mlbb_kh_03', 'prod_mlbb_kh_008', '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_mlbb_kh_04', 'prod_mlbb_kh_008', '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_mlbb_kh_05', 'prod_mlbb_kh_008', '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true),
-  ('pkg_mlbb_kh_06', 'prod_mlbb_kh_008', '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.9 Free Fire Khmer Regional
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_ff_kh_009', 'FREE FIRE | KHMER', 'free-fire-khmer', '/images/games/freefire.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/freefire.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_ff_kh_01', 'prod_ff_kh_009', 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true),
-  ('pkg_ff_kh_02', 'prod_ff_kh_009', '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_ff_kh_03', 'prod_ff_kh_009', '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_ff_kh_04', 'prod_ff_kh_009', '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_ff_kh_05', 'prod_ff_kh_009', '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true),
-  ('pkg_ff_kh_06', 'prod_ff_kh_009', '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.10 Blood Strike
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_bs_010', 'Blood Strike', 'blood-strike', '/images/games/bloodstrike.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/bloodstrike.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_bs_01', 'prod_bs_010', '100 Gold', 100, 0.99, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_bs_02', 'prod_bs_010', '500 Gold', 500, 4.99, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_bs_03', 'prod_bs_010', '1000 Gold', 1000, 9.99, 'NORMAL', 'ពេញនិយម', true),
-  ('pkg_bs_04', 'prod_bs_010', '2500 Gold', 2500, 24.99, 'NORMAL', 'Bonus 10%', true),
-  ('pkg_bs_05', 'prod_bs_010', '5000 Gold', 5000, 49.99, 'NORMAL', 'កញ្ចប់ធំ 💎', true)
-ON CONFLICT ("id") DO NOTHING;
-
--- 7.11 Magic Chess: Go Go
-INSERT INTO "Product" ("id", "name", "slug", "image", "category", "isActive")
-VALUES ('prod_mc_011', 'Magic Chess: Go Go', 'magic-chess-gogo', '/images/games/magicchess.png', 'MOBILE_GAME', true)
-ON CONFLICT ("slug") DO UPDATE SET "image" = '/images/games/magicchess.png', "isActive" = true;
-
-INSERT INTO "Package" ("id", "productId", "name", "amount", "price", "category", "badge", "isActive")
-VALUES 
-  ('pkg_mc_01', 'prod_mc_011', '50 Diamonds', 50, 0.85, 'BEST_SELLER', 'Hot 🔥', true),
-  ('pkg_mc_02', 'prod_mc_011', '100 Diamonds', 100, 1.65, 'BEST_SELLER', 'ពេញនិយម', true),
-  ('pkg_mc_03', 'prod_mc_011', '500 Diamonds', 500, 7.90, 'NORMAL', 'Bonus 10%', true),
-  ('pkg_mc_04', 'prod_mc_011', '1000 Diamonds', 1000, 15.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true)
-ON CONFLICT ("id") DO NOTHING;
+-- 7.1 Insert All Products
+INSERT INTO "Product" ("name", "slug", "image", "category", "isActive")
+VALUES
+  -- Top Mobile Games
+  ('Mobile Legends: Bang Bang', 'mobile-legends', '/images/games/mlbb.png', 'MOBILE_GAME', true),
+  ('MOBILE LEGENDS | KHMER', 'mobile-legends-khmer', '/images/games/mlbb.png', 'MOBILE_GAME', true),
+  ('MOBILE LEGENDS | PHILIPPINES', 'mobile-legends-philippines', '/images/games/mlbb.png', 'MOBILE_GAME', true),
+  ('MOBILE LEGENDS | KHMER (VIP)', 'mobile-legends-indonesia', '/images/games/mlbb.png', 'MOBILE_GAME', true),
+  ('Free Fire', 'free-fire', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('FREE FIRE | KHMER', 'free-fire-khmer', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('FREE FIRE | KHMER (VIP)', 'free-fire-indonesia', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('FREE FIRE | VIETNAM', 'free-fire-vietnam', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('FREE FIRE | TAIWAN', 'free-fire-taiwan', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('Free Fire MAX', 'free-fire-max', '/images/games/freefire.png', 'MOBILE_GAME', true),
+  ('PUBG Mobile', 'pubg-mobile', '/images/games/pubgm.png', 'MOBILE_GAME', true),
+  ('Honor of Kings', 'honor-of-kings', '/images/games/hok.png', 'MOBILE_GAME', true),
+  ('Blood Strike', 'blood-strike', '/images/games/bloodstrike.png', 'MOBILE_GAME', true),
+  ('Magic Chess: Go Go', 'magic-chess-gogo', '/images/games/magicchess.png', 'MOBILE_GAME', true),
+  ('Roblox', 'roblox', '/images/games/roblox.png', 'MOBILE_GAME', true),
+  ('Genshin Impact', 'genshin-impact', '/images/games/genshin-impact.png', 'MOBILE_GAME', true),
+  ('Honkai: Star Rail', 'honkai-star-rail', '/images/games/genshin-impact.png', 'MOBILE_GAME', true),
+  ('Zenless Zone Zero', 'zenless-zone-zero', '/images/games/genshin-impact.png', 'MOBILE_GAME', true),
+  ('Wuthering Waves', 'wuthering-waves', '/images/games/genshin-impact.png', 'MOBILE_GAME', true),
+  ('Solo Leveling: ARISE', 'solo-leveling-arise', '/images/games/genshin-impact.png', 'MOBILE_GAME', true),
+  ('Farlight 84', 'farlight-84', '/images/games/farlight.png', 'MOBILE_GAME', true),
+  ('Bullet Echo', 'bullet-echo', '/images/games/bullet-echo.png', 'MOBILE_GAME', true),
+  ('Delta Force', 'delta-force', '/images/games/deltaforce.png', 'PC_GAME', true),
+  ('Valorant', 'valorant', '/images/games/valorant.png', 'PC_GAME', true),
+  ('Call of Duty: Mobile', 'call-of-duty-mobile', '/images/games/pubgm.png', 'MOBILE_GAME', true),
+  ('Arena of Valor', 'arena-of-valor', '/images/games/hok.png', 'MOBILE_GAME', true),
+  ('League of Legends: Wild Rift', 'wild-rift', '/images/games/hok.png', 'MOBILE_GAME', true),
+  ('Brawl Stars', 'brawl-stars', '/images/games/magicchess.png', 'MOBILE_GAME', true),
+  ('Clash of Clans', 'clash-of-clans', '/images/games/magicchess.png', 'MOBILE_GAME', true),
+  ('Clash Royale', 'clash-royale', '/images/games/magicchess.png', 'MOBILE_GAME', true),
+  ('League of Legends', 'league-of-legends', '/images/games/valorant.png', 'PC_GAME', true),
+  ('Dota 2', 'dota-2', '/images/games/valorant.png', 'PC_GAME', true),
+  ('Steam Wallet Code', 'steam-wallet', '/images/games/valorant.png', 'VOUCHER', true),
+  ('Razer Gold PIN', 'razer-gold', '/images/games/valorant.png', 'VOUCHER', true),
+  ('Google Play Gift Card', 'google-play-gift-card', '/images/games/magicchess.png', 'VOUCHER', true),
+  ('Apple iTunes Gift Card', 'apple-itunes-gift-card', '/images/games/magicchess.png', 'VOUCHER', true)
+ON CONFLICT ("slug") DO UPDATE SET
+  "name" = EXCLUDED."name",
+  "image" = EXCLUDED."image",
+  "category" = EXCLUDED."category",
+  "isActive" = true;
 
 -- ====================================================================
--- 8. SUPABASE REALTIME CONFIGURATION
+-- 8. PACKAGES SEED (Dynamic Foreign-Key Safe Matching)
+-- ====================================================================
+
+-- 8.1 Mobile Legends: Bang Bang Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends'
+UNION ALL
+SELECT p.id, '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends'
+UNION ALL
+SELECT p.id, '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends'
+UNION ALL
+SELECT p.id, '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends'
+UNION ALL
+SELECT p.id, '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true FROM "Product" p WHERE p.slug = 'mobile-legends'
+UNION ALL
+SELECT p.id, '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'mobile-legends';
+
+-- 8.2 MOBILE LEGENDS | KHMER Regional Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Weekly Diamond Pass', 1, 1.99, 'BEST_SELLER', 'VIP Pass 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer'
+UNION ALL
+SELECT p.id, '86 Diamonds (78 + 8 Bonus)', 86, 1.45, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer'
+UNION ALL
+SELECT p.id, '172 Diamonds (156 + 16 Bonus)', 172, 2.85, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer'
+UNION ALL
+SELECT p.id, '257 Diamonds (234 + 23 Bonus)', 257, 4.25, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer'
+UNION ALL
+SELECT p.id, '706 Diamonds (625 + 81 Bonus)', 706, 11.50, 'NORMAL', 'Bonus 12%', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer'
+UNION ALL
+SELECT p.id, '2195 Diamonds (1860 + 335 Bonus)', 2195, 34.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'mobile-legends-khmer';
+
+-- 8.3 Free Fire Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true FROM "Product" p WHERE p.slug = 'free-fire'
+UNION ALL
+SELECT p.id, '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire'
+UNION ALL
+SELECT p.id, '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'free-fire'
+UNION ALL
+SELECT p.id, '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire'
+UNION ALL
+SELECT p.id, '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'free-fire'
+UNION ALL
+SELECT p.id, '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'free-fire';
+
+-- 8.4 FREE FIRE | KHMER Regional Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Weekly Membership', 1, 1.99, 'BEST_SELLER', 'Hot Deal 🔥', true FROM "Product" p WHERE p.slug = 'free-fire-khmer'
+UNION ALL
+SELECT p.id, '100 Diamonds + 10 Bonus', 110, 0.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire-khmer'
+UNION ALL
+SELECT p.id, '310 Diamonds + 31 Bonus', 341, 2.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'free-fire-khmer'
+UNION ALL
+SELECT p.id, '520 Diamonds + 52 Bonus', 572, 4.90, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'free-fire-khmer'
+UNION ALL
+SELECT p.id, '1060 Diamonds + 106 Bonus', 1166, 9.75, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'free-fire-khmer'
+UNION ALL
+SELECT p.id, '2180 Diamonds + 218 Bonus', 2398, 19.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'free-fire-khmer';
+
+-- 8.5 PUBG Mobile Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '60 UC', 60, 0.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'pubg-mobile'
+UNION ALL
+SELECT p.id, '325 UC (300 + 25 Bonus)', 325, 4.85, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'pubg-mobile'
+UNION ALL
+SELECT p.id, '660 UC (600 + 60 Bonus)', 660, 9.60, 'NORMAL', 'Royale Pass', true FROM "Product" p WHERE p.slug = 'pubg-mobile'
+UNION ALL
+SELECT p.id, '1800 UC (1500 + 300 Bonus)', 1800, 23.90, 'NORMAL', 'Bonus 20%', true FROM "Product" p WHERE p.slug = 'pubg-mobile'
+UNION ALL
+SELECT p.id, '3850 UC (3000 + 850 Bonus)', 3850, 47.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'pubg-mobile';
+
+-- 8.6 Honor of Kings Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '80 Tokens (+8 Bonus)', 88, 0.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'honor-of-kings'
+UNION ALL
+SELECT p.id, '240 Tokens (+24 Bonus)', 264, 2.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'honor-of-kings'
+UNION ALL
+SELECT p.id, '400 Tokens (+40 Bonus)', 440, 4.85, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'honor-of-kings'
+UNION ALL
+SELECT p.id, '800 Tokens (+95 Bonus)', 895, 9.70, 'NORMAL', 'Bonus 12%', true FROM "Product" p WHERE p.slug = 'honor-of-kings'
+UNION ALL
+SELECT p.id, '2400 Tokens (+300 Bonus)', 2700, 28.90, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'honor-of-kings';
+
+-- 8.7 Genshin Impact Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Blessing of the Welkin Moon', 1, 4.99, 'BEST_SELLER', 'Best Value 🌙', true FROM "Product" p WHERE p.slug = 'genshin-impact'
+UNION ALL
+SELECT p.id, '300 + 30 Genesis Crystals', 330, 4.90, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'genshin-impact'
+UNION ALL
+SELECT p.id, '980 + 110 Genesis Crystals', 1090, 14.80, 'NORMAL', 'Bonus 11%', true FROM "Product" p WHERE p.slug = 'genshin-impact'
+UNION ALL
+SELECT p.id, '1980 + 260 Genesis Crystals', 2240, 29.50, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'genshin-impact'
+UNION ALL
+SELECT p.id, '3280 + 600 Genesis Crystals', 3880, 48.90, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'genshin-impact';
+
+-- 8.8 Roblox Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '80 Robux', 80, 0.99, 'BEST_SELLER', 'Fast ⚡', true FROM "Product" p WHERE p.slug = 'roblox'
+UNION ALL
+SELECT p.id, '400 Robux', 400, 4.85, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'roblox'
+UNION ALL
+SELECT p.id, '800 Robux', 800, 9.60, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'roblox'
+UNION ALL
+SELECT p.id, '1700 Robux', 1700, 19.80, 'NORMAL', 'Bonus 15%', true FROM "Product" p WHERE p.slug = 'roblox'
+UNION ALL
+SELECT p.id, '4500 Robux', 4500, 49.00, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'roblox';
+
+-- 8.9 Valorant Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '475 Valorant Points (VP)', 475, 4.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'valorant'
+UNION ALL
+SELECT p.id, '1000 Valorant Points (VP)', 1000, 9.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'valorant'
+UNION ALL
+SELECT p.id, '2050 Valorant Points (VP)', 2050, 19.80, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'valorant'
+UNION ALL
+SELECT p.id, '3650 Valorant Points (VP)', 3650, 34.50, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'valorant'
+UNION ALL
+SELECT p.id, '5350 Valorant Points (VP)', 5350, 49.00, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'valorant';
+
+-- 8.10 Blood Strike Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '100 Gold', 100, 0.99, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'blood-strike'
+UNION ALL
+SELECT p.id, '500 Gold', 500, 4.99, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'blood-strike'
+UNION ALL
+SELECT p.id, '1000 Gold', 1000, 9.99, 'NORMAL', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'blood-strike'
+UNION ALL
+SELECT p.id, '2500 Gold', 2500, 24.99, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'blood-strike'
+UNION ALL
+SELECT p.id, '5000 Gold', 5000, 49.99, 'NORMAL', 'កញ្ចប់ធំ 💎', true FROM "Product" p WHERE p.slug = 'blood-strike';
+
+-- 8.11 Magic Chess: Go Go Packages
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, '50 Diamonds', 50, 0.85, 'BEST_SELLER', 'Hot 🔥', true FROM "Product" p WHERE p.slug = 'magic-chess-gogo'
+UNION ALL
+SELECT p.id, '100 Diamonds', 100, 1.65, 'BEST_SELLER', 'ពេញនិយម', true FROM "Product" p WHERE p.slug = 'magic-chess-gogo'
+UNION ALL
+SELECT p.id, '500 Diamonds', 500, 7.90, 'NORMAL', 'Bonus 10%', true FROM "Product" p WHERE p.slug = 'magic-chess-gogo'
+UNION ALL
+SELECT p.id, '1000 Diamonds', 1000, 15.50, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true FROM "Product" p WHERE p.slug = 'magic-chess-gogo';
+
+-- 8.12 Dynamic Default Packages for Any Other Games
+INSERT INTO "Package" ("productId", "name", "amount", "price", "category", "badge", "isActive")
+SELECT p.id, 'Standard Tier (Small)', 100, 0.99, 'BEST_SELLER', 'Hot 🔥', true
+FROM "Product" p
+WHERE NOT EXISTS (SELECT 1 FROM "Package" pkg WHERE pkg."productId" = p.id)
+UNION ALL
+SELECT p.id, 'Popular Tier (Medium)', 500, 4.99, 'BEST_SELLER', 'ពេញនិយម', true
+FROM "Product" p
+WHERE NOT EXISTS (SELECT 1 FROM "Package" pkg WHERE pkg."productId" = p.id)
+UNION ALL
+SELECT p.id, 'Mega Tier (Large)', 1200, 9.99, 'NORMAL', 'Bonus 15%', true
+FROM "Product" p
+WHERE NOT EXISTS (SELECT 1 FROM "Package" pkg WHERE pkg."productId" = p.id)
+UNION ALL
+SELECT p.id, 'VIP Exclusive Tier', 3500, 29.99, 'NORMAL', 'កញ្ចប់ពិសេស 💎', true
+FROM "Product" p
+WHERE NOT EXISTS (SELECT 1 FROM "Package" pkg WHERE pkg."productId" = p.id);
+
+-- ====================================================================
+-- 9. SUPABASE REALTIME CONFIGURATION
 -- ====================================================================
 DO $$
 BEGIN
@@ -452,5 +455,3 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN NULL;
   END;
 END $$;
-
-
