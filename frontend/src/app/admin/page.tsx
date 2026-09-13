@@ -24,7 +24,7 @@ import SecurityDashboard from '../../components/SecurityDashboard';
 export default function AdminDashboard() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'backup' | 'security'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'diamonds' | 'backup' | 'security'>('metrics');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -247,6 +247,50 @@ export default function AdminDashboard() {
       await loadAllData();
     } catch (err: any) {
       setError(err.message || 'Failed to toggle product status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleTogglePackageStatus = async (pkg: any, prod: GameProduct) => {
+    setActionLoading(true);
+    try {
+      const newStatus = pkg.isActive === false ? true : false;
+      await updateAdminPackage(pkg.id, {
+        productId: prod.id,
+        isActive: newStatus,
+      });
+      setSuccess(`Package "${pkg.name}" is now ${newStatus ? 'Active' : 'Disabled'}`);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update package status');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Dedicated Diamonds / Packages Editor States
+  const [diamondGameFilter, setDiamondGameFilter] = useState('ALL');
+  const [diamondSearchQuery, setDiamondSearchQuery] = useState('');
+  const [diamondCategoryFilter, setDiamondCategoryFilter] = useState('ALL');
+  const [quickEditingPkgId, setQuickEditingPkgId] = useState<string | null>(null);
+  const [quickEditPrice, setQuickEditPrice] = useState('');
+  const [quickEditAmount, setQuickEditAmount] = useState('');
+
+  const handleSaveQuickEdit = async (pkg: any, prod: GameProduct) => {
+    if (!quickEditPrice || !quickEditAmount) return;
+    setActionLoading(true);
+    try {
+      await updateAdminPackage(pkg.id, {
+        productId: prod.id,
+        price: parseFloat(quickEditPrice),
+        amount: parseInt(quickEditAmount, 10),
+      });
+      setSuccess(`Package "${pkg.name}" updated!`);
+      setQuickEditingPkgId(null);
+      await loadAllData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update package');
     } finally {
       setActionLoading(false);
     }
@@ -534,11 +578,14 @@ export default function AdminDashboard() {
     return `${API_BASE.replace(/\/api$/, '')}/${img}`;
   };
 
+  const totalPackagesCount = allProducts.reduce((sum, p) => sum + (p.packages?.length || 0), 0);
+
   const navItems = [
     { id: 'metrics', icon: BarChart3, label: 'Overview', count: null },
     { id: 'orders', icon: ShoppingBag, label: 'Orders', count: orders.length },
     { id: 'stock', icon: Database, label: 'Voucher Stock', count: stocks.filter((s: any) => !s.isUsed).length },
-    { id: 'products', icon: Package, label: 'Products', count: allProducts.length },
+    { id: 'products', icon: Package, label: 'Game Products', count: allProducts.length },
+    { id: 'diamonds', icon: Gem, label: 'Diamonds / Packages', count: totalPackagesCount },
     { id: 'backup', icon: HardDrive, label: 'Backup & Restore', count: snapshots.length || null },
     { id: 'security', icon: ShieldCheck, label: 'Security & DDoS', count: null },
   ] as const;
@@ -1322,6 +1369,388 @@ export default function AdminDashboard() {
                     );
                   })()}
                 </div>
+              </div>
+            )}
+
+            {/* ══ TAB 4B: DIAMONDS & PACKAGES EDITOR ════════════════════════ */}
+            {activeTab === 'diamonds' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                
+                {/* Header & Quick Summary */}
+                <div className={`${panelCls} p-5 sm:p-6`} style={panelBg}>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-black uppercase tracking-wider mb-2">
+                        <Gem className="h-3.5 w-3.5" />
+                        <span>Diamond Packages Management System</span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white">Diamonds & Packages Editor</h2>
+                      <p className="text-slate-400 text-xs mt-1">
+                        Configure diamond tiers, adjust prices, edit badge highlights, custom icons, and manage availability across all games.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (allProducts.length > 0) {
+                            openAddPackageModalForGame(allProducts[0]);
+                          } else {
+                            setError('Please create a game first before adding packages');
+                          }
+                        }}
+                        className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-white font-black text-xs shadow-lg hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+                        style={btnGrad}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add Diamond Package</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total Packages</span>
+                      <span className="text-lg font-black text-cyan-400 mt-0.5 block">{totalPackagesCount}</span>
+                    </div>
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Connected Games</span>
+                      <span className="text-lg font-black text-white mt-0.5 block">{allProducts.length}</span>
+                    </div>
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Best Sellers</span>
+                      <span className="text-lg font-black text-violet-400 mt-0.5 block">
+                        {allProducts.reduce((acc, p) => acc + (p.packages?.filter((k: any) => k.category === 'BEST_SELLER')?.length || 0), 0)}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Active Tiers</span>
+                      <span className="text-lg font-black text-emerald-400 mt-0.5 block">
+                        {allProducts.reduce((acc, p) => acc + (p.packages?.filter((k: any) => k.isActive !== false)?.length || 0), 0)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className={`${panelCls} p-4 sm:p-5`} style={panelBg}>
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    
+                    {/* Game Filter Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                      <button
+                        type="button"
+                        onClick={() => setDiamondGameFilter('ALL')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                          diamondGameFilter === 'ALL'
+                            ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        All Games ({totalPackagesCount})
+                      </button>
+                      {allProducts.map(prod => {
+                        const pkgCount = prod.packages?.length || 0;
+                        return (
+                          <button
+                            key={`filter-prod-${prod.id}`}
+                            type="button"
+                            onClick={() => setDiamondGameFilter(prod.id)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center space-x-1.5 ${
+                              diamondGameFilter === prod.id
+                                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            <span>{prod.name}</span>
+                            <span className="text-[10px] opacity-80">({pkgCount})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Search & Category Filter */}
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      <div className="relative flex-1 sm:flex-initial">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                        <input
+                          type="text"
+                          placeholder="Search diamonds, name, price..."
+                          value={diamondSearchQuery}
+                          onChange={e => setDiamondSearchQuery(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs w-full sm:w-56"
+                        />
+                      </div>
+                      <select
+                        value={diamondCategoryFilter}
+                        onChange={e => setDiamondCategoryFilter(e.target.value)}
+                        className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 text-xs shrink-0"
+                      >
+                        <option value="ALL">All Tiers</option>
+                        <option value="NORMAL">Normal</option>
+                        <option value="BEST_SELLER">Best Seller</option>
+                        <option value="ACTIVE">Active Only</option>
+                        <option value="DISABLED">Disabled Only</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Packages Editor Catalog List */}
+                {(() => {
+                  const targetProducts = diamondGameFilter === 'ALL'
+                    ? allProducts
+                    : allProducts.filter(p => p.id === diamondGameFilter);
+
+                  let totalShown = 0;
+
+                  return (
+                    <div className="space-y-6">
+                      {targetProducts.map(prod => {
+                        const filteredPkgs = (prod.packages || []).filter((pkg: any) => {
+                          const q = diamondSearchQuery.toLowerCase();
+                          const matchesQuery = !q 
+                            || pkg.name.toLowerCase().includes(q) 
+                            || String(pkg.amount).includes(q) 
+                            || String(pkg.price).includes(q)
+                            || (pkg.badge && pkg.badge.toLowerCase().includes(q));
+
+                          let matchesCat = true;
+                          if (diamondCategoryFilter === 'NORMAL') matchesCat = pkg.category !== 'BEST_SELLER';
+                          else if (diamondCategoryFilter === 'BEST_SELLER') matchesCat = pkg.category === 'BEST_SELLER';
+                          else if (diamondCategoryFilter === 'ACTIVE') matchesCat = pkg.isActive !== false;
+                          else if (diamondCategoryFilter === 'DISABLED') matchesCat = pkg.isActive === false;
+
+                          return matchesQuery && matchesCat;
+                        });
+
+                        totalShown += filteredPkgs.length;
+
+                        if (diamondSearchQuery && filteredPkgs.length === 0) return null;
+
+                        return (
+                          <div key={`diamond-group-${prod.id}`} className={`${panelCls} overflow-hidden`} style={panelBg}>
+                            {/* Product Header Row */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-950/60 border-b border-slate-800">
+                              <div className="flex items-center space-x-3 min-w-0">
+                                <img
+                                  src={getProductImgSrc(prod.image)}
+                                  alt={prod.name}
+                                  className="h-10 w-10 rounded-xl object-cover border border-slate-800 shadow-sm shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <div className="flex items-center space-x-2">
+                                    <h4 className="text-white font-extrabold text-sm truncate">{prod.name}</h4>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                                      {prod.packages?.length || 0} Tiers
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 font-mono">/{prod.slug}</p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => openAddPackageModalForGame(prod)}
+                                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-all shrink-0 self-start sm:self-auto"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                <span>Add Diamond Tier</span>
+                              </button>
+                            </div>
+
+                            {/* Packages Grid */}
+                            <div className="p-4 sm:p-5">
+                              {filteredPkgs.length === 0 ? (
+                                <div className="text-center py-6 text-slate-600 text-xs italic">
+                                  No packages match the current filter for {prod.name}.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                  {filteredPkgs.map((pkg: any) => {
+                                    const isQuickEditing = quickEditingPkgId === pkg.id;
+
+                                    return (
+                                      <div
+                                        key={`editor-pkg-${pkg.id}`}
+                                        className={`group rounded-2xl border p-3.5 transition-all flex flex-col justify-between bg-slate-900/90 shadow-md ${
+                                          pkg.isActive === false
+                                            ? 'border-red-900/50 opacity-60 bg-red-950/10'
+                                            : 'border-slate-800 hover:border-cyan-500/40 hover:shadow-cyan-500/5'
+                                        }`}
+                                      >
+                                        <div>
+                                          {/* Top Tag & Status */}
+                                          <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                                            <div className="flex items-center space-x-1.5 min-w-0">
+                                              <img
+                                                src={getPkgImgSrc(pkg.image)}
+                                                alt={pkg.name}
+                                                className="h-7 w-7 object-contain rounded-lg p-0.5 bg-slate-950 border border-slate-800 shrink-0"
+                                              />
+                                              <span className="text-white font-extrabold text-xs truncate max-w-[110px]" title={pkg.name}>
+                                                {pkg.name}
+                                              </span>
+                                            </div>
+
+                                            {pkg.isActive === false ? (
+                                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 shrink-0">
+                                                Disabled
+                                              </span>
+                                            ) : pkg.category === 'BEST_SELLER' ? (
+                                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-500/30 text-violet-300 shrink-0">
+                                                ★ Best Seller
+                                              </span>
+                                            ) : (
+                                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
+                                                Active
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {/* Amount & Price Display / Quick Edit Mode */}
+                                          {isQuickEditing ? (
+                                            <div className="space-y-2 my-2 p-2 rounded-xl bg-slate-950 border border-cyan-500/40">
+                                              <div>
+                                                <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Price ($ USD)</label>
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  value={quickEditPrice}
+                                                  onChange={e => setQuickEditPrice(e.target.value)}
+                                                  className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-cyan-400 font-black text-xs focus:outline-none"
+                                                  autoFocus
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Diamonds Amount</label>
+                                                <input
+                                                  type="number"
+                                                  value={quickEditAmount}
+                                                  onChange={e => setQuickEditAmount(e.target.value)}
+                                                  className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white font-bold text-xs focus:outline-none"
+                                                />
+                                              </div>
+                                              <div className="flex gap-1.5 pt-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleSaveQuickEdit(pkg, prod)}
+                                                  disabled={actionLoading}
+                                                  className="flex-1 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-[10px] transition-all"
+                                                >
+                                                  Save
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setQuickEditingPkgId(null)}
+                                                  className="px-2 py-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-[10px]"
+                                                >
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="my-2 space-y-1">
+                                              <div className="flex items-baseline justify-between">
+                                                <span className="text-xs text-slate-400 font-semibold">Price:</span>
+                                                <span className="text-cyan-400 font-black text-base">
+                                                  ${pkg.price.toFixed(2)}
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-slate-400 font-semibold">Diamonds:</span>
+                                                <span className="text-slate-200 font-black font-mono">
+                                                  💎 {pkg.amount.toLocaleString()}
+                                                </span>
+                                              </div>
+                                              {pkg.badge && (
+                                                <div className="text-[10px] text-amber-400 font-bold truncate pt-0.5">
+                                                  🏷️ {pkg.badge}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Bottom Control Actions */}
+                                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleTogglePackageStatus(pkg, prod)}
+                                            disabled={actionLoading}
+                                            className={`p-1.5 rounded-lg text-xs font-bold transition-all ${
+                                              pkg.isActive === false
+                                                ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                                                : 'bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
+                                            }`}
+                                            title={pkg.isActive === false ? 'Enable Package' : 'Disable Package'}
+                                          >
+                                            {pkg.isActive === false ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                          </button>
+
+                                          <div className="flex items-center space-x-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (isQuickEditing) {
+                                                  setQuickEditingPkgId(null);
+                                                } else {
+                                                  setQuickEditingPkgId(pkg.id);
+                                                  setQuickEditPrice(String(pkg.price));
+                                                  setQuickEditAmount(String(pkg.amount));
+                                                }
+                                              }}
+                                              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                                isQuickEditing
+                                                  ? 'bg-cyan-500 text-slate-950 font-black'
+                                                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-cyan-400'
+                                              }`}
+                                              title="Quick Price & Amount Edit"
+                                            >
+                                              Quick
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => openEditPackageModal(pkg, prod)}
+                                              className="p-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 transition-all border border-cyan-500/30"
+                                              title="Full Package Editor"
+                                            >
+                                              <Pencil className="h-3.5 w-3.5" />
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeletePackage(pkg.id)}
+                                              disabled={actionLoading}
+                                              className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all border border-red-500/30"
+                                              title="Delete Package"
+                                            >
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {totalShown === 0 && (
+                        <div className={`${panelCls} p-12 text-center text-slate-500 text-xs`} style={panelBg}>
+                          No diamond packages match your filter &quot;{diamondSearchQuery}&quot;.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
               </div>
             )}
 
