@@ -673,39 +673,75 @@ export async function updateAdminPackage(id: string, data: { name?: string; amou
 }
 
 export async function deleteAdminProduct(id: string) {
+  const cleanId = encodeURIComponent(id.trim());
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
+  };
+
   const endpoints = [
-    `${API_BASE}/admin/products/${id}`,
-    `http://localhost:5001/api/admin/products/${id}`,
+    `${API_BASE}/admin/products/${cleanId}`,
+    `${serverUrl}/api/admin/products/${cleanId}`,
+    `${API_BASE}/products/${cleanId}`,
+    `${serverUrl}/api/products/${cleanId}`,
   ];
+
+  let lastError = 'Failed to delete product';
 
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers,
       });
-      if (res.ok) return await res.json();
-    } catch (e) {}
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        return data || { success: true };
+      }
+      if (data?.error) {
+        lastError = data.error;
+      }
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
   }
-  throw new Error('Failed to delete product');
+  throw new Error(lastError);
 }
 
 export async function deleteAdminPackage(id: string) {
+  const cleanId = encodeURIComponent(id.trim());
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
+  };
+
   const endpoints = [
-    `${API_BASE}/admin/packages/${id}`,
-    `http://localhost:5001/api/admin/packages/${id}`,
+    `${API_BASE}/admin/packages/${cleanId}`,
+    `${serverUrl}/api/admin/packages/${cleanId}`,
   ];
+
+  let lastError = 'Failed to delete package';
 
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers,
       });
-      if (res.ok) return await res.json();
-    } catch (e) {}
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        return data || { success: true };
+      }
+      if (data?.error) {
+        lastError = data.error;
+      }
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
   }
-  throw new Error('Failed to delete package');
+  throw new Error(lastError);
 }
 
 // Backup and Restore
