@@ -30,6 +30,8 @@ export default function Header() {
   const [resellerModalOpen, setResellerModalOpen] = useState(false);
   const [creatorModalOpen, setCreatorModalOpen] = useState(false);
   const [faqModalOpen, setFaqModalOpen] = useState(false);
+  const [updatesModalOpen, setUpdatesModalOpen] = useState(false);
+  const [highContrast, setHighContrast] = useState(false);
 
   // Load games for smart search
   useEffect(() => {
@@ -62,7 +64,7 @@ export default function Header() {
 
   // Lock body scroll when mobile menu or modal is open
   useEffect(() => {
-    if (mobileMenuOpen || searchModalOpen || resellerModalOpen || creatorModalOpen || faqModalOpen) {
+    if (mobileMenuOpen || searchModalOpen || resellerModalOpen || creatorModalOpen || faqModalOpen || updatesModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -70,7 +72,7 @@ export default function Header() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [mobileMenuOpen, searchModalOpen, resellerModalOpen, creatorModalOpen, faqModalOpen]);
+  }, [mobileMenuOpen, searchModalOpen, resellerModalOpen, creatorModalOpen, faqModalOpen, updatesModalOpen]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -175,21 +177,25 @@ export default function Header() {
               </button>
 
               {/* Telegram Updates Sky Blue Pill */}
-              <a
-                href="https://t.me/darazzdev"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-1.5 rounded-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-black flex items-center space-x-1.5 shadow-md transition-all active:scale-95"
+              <button
+                type="button"
+                onClick={() => setUpdatesModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-black flex items-center space-x-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <Send className="h-3.5 w-3.5 fill-current -rotate-12" />
                 <span>Updates</span>
-              </a>
+              </button>
 
               {/* Theme Sun Toggle Button */}
               <button
                 type="button"
-                title="Brightness Mode"
-                className="h-8 w-8 rounded-full bg-slate-900/90 hover:bg-slate-800 text-amber-400 border border-slate-700/60 transition-colors flex items-center justify-center cursor-pointer"
+                onClick={() => setHighContrast(!highContrast)}
+                title="Brightness / Contrast Mode"
+                className={`h-8 w-8 rounded-full border transition-colors flex items-center justify-center cursor-pointer ${
+                  highContrast
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50'
+                    : 'bg-slate-900/90 hover:bg-slate-800 text-amber-400 border-slate-700/60'
+                }`}
               >
                 <Sun className="h-4 w-4" />
               </button>
@@ -366,15 +372,24 @@ export default function Header() {
                 <span>24/7 dedicated support representative</span>
               </div>
             </div>
-            <a
-              href="https://t.me/darazzdev"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
-            >
-              <Send className="h-3.5 w-3.5 fill-current" />
-              <span>Apply via Telegram @darazzdev</span>
-            </a>
+            <div className="space-y-2">
+              <a
+                href="https://t.me/darazzdev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
+              >
+                <Send className="h-3.5 w-3.5 fill-current" />
+                <span>Apply via Telegram @darazzdev</span>
+              </a>
+              <Link
+                href="/reseller"
+                onClick={() => setResellerModalOpen(false)}
+                className="w-full py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-cyan-400 font-bold text-xs text-center block border border-cyan-500/20"
+              >
+                View Full Reseller Program Details →
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -405,15 +420,24 @@ export default function Header() {
                 <span>Free monthly diamond sponsor packs</span>
               </div>
             </div>
-            <a
-              href="https://t.me/darazzdev"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
-            >
-              <Send className="h-3.5 w-3.5 fill-current" />
-              <span>Contact for Creator Sponsorship</span>
-            </a>
+            <div className="space-y-2">
+              <a
+                href="https://t.me/darazzdev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md"
+              >
+                <Send className="h-3.5 w-3.5 fill-current" />
+                <span>Contact for Creator Sponsorship</span>
+              </a>
+              <Link
+                href="/creator"
+                onClick={() => setCreatorModalOpen(false)}
+                className="w-full py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-amber-400 font-bold text-xs text-center block border border-amber-500/20"
+              >
+                View Full Creator Perks & Requirements →
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -445,12 +469,82 @@ export default function Header() {
                 <p className="text-slate-400 text-[11px]">អាចទាក់ទងមកកាន់ Telegram Support @darazzdev បាន 24/7។</p>
               </div>
             </div>
-            <button
-              onClick={() => setFaqModalOpen(false)}
-              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
-            >
-              Close
-            </button>
+            <div className="flex gap-2">
+              <Link
+                href="/faq"
+                onClick={() => setFaqModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-pink-500/20 text-pink-400 hover:bg-pink-500/30 text-center font-bold text-xs border border-pink-500/30"
+              >
+                View Full FAQ Page →
+              </Link>
+              <button
+                onClick={() => setFaqModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: TELEGRAM UPDATES & ANNOUNCEMENTS ════════════════════════ */}
+      {updatesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 text-slate-200 z-10 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+                  <Send className="h-4 w-4 fill-current -rotate-12" />
+                </div>
+                <h3 className="font-black text-base text-white">NA-DY TOPUP Updates & News</h3>
+              </div>
+              <button onClick={() => setUpdatesModalOpen(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 text-xs mb-5 max-h-72 overflow-y-auto pr-1">
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-sky-500/30 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-sky-400 bg-sky-950/80 px-2 py-0.5 rounded-full border border-sky-800">
+                    Flash Sale ⚡
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-semibold">Today</span>
+                </div>
+                <strong className="text-white block pt-1">🎉 បញ្ចុះតម្លៃពិសេស 10% គ្រប់កញ្ចប់ពេជ្រ MLBB & Free Fire!</strong>
+                <p className="text-slate-400 text-[11px] leading-relaxed">បញ្ចូលពេជ្ររហ័ស 24/7 តាម ABA KHQR & Bakong ដោយឥតគិតថ្លៃសេវាបន្ថែម។</p>
+              </div>
+
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-pink-400 bg-pink-950/80 px-2 py-0.5 rounded-full border border-pink-800">
+                    System Notice
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-semibold">Live 24/7</span>
+                </div>
+                <strong className="text-white block pt-1">🚀 ប្រព័ន្ធ Server & API ដំណើរការពេញលេញ 100%</strong>
+                <p className="text-slate-400 text-[11px] leading-relaxed">ការទូទាត់ប្រាក់និងការបញ្ជូនពេជ្រគឺស្វ័យប្រវត្តក្នុងរយៈពេលពី 1 ទៅ 30 វិនាទី។</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <a
+                href="https://t.me/darazzdev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-black text-xs flex items-center justify-center space-x-2 shadow-lg shadow-sky-500/25 transition-all"
+              >
+                <Send className="h-4 w-4 fill-current -rotate-12" />
+                <span>Join Official Telegram Channel</span>
+              </a>
+              <button
+                onClick={() => setUpdatesModalOpen(false)}
+                className="w-full py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
