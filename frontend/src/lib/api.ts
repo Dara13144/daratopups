@@ -629,47 +629,71 @@ export async function addAdminPackage(
 }
 
 export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string }) {
+  const cleanId = encodeURIComponent(id.trim());
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
+  };
+
   const endpoints = [
-    `${API_BASE}/admin/products/${id}`,
-    `http://localhost:5001/api/admin/products/${id}`,
+    `${API_BASE}/admin/products/${cleanId}`,
+    `${serverUrl}/api/admin/products/${cleanId}`,
+    `${API_BASE}/products/${cleanId}`,
+    `${serverUrl}/api/products/${cleanId}`,
   ];
+
+  let lastError = 'Failed to update product';
 
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
+        headers,
         body: JSON.stringify(data),
       });
-      if (res.ok) return await res.json();
-    } catch (e) {}
+      const resData = await res.json().catch(() => null);
+      if (res.ok) return resData || { success: true };
+      if (resData?.error) lastError = resData.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
   }
-  throw new Error('Failed to update product');
+  throw new Error(lastError);
 }
 
-export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean; image?: string }) {
+export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean; image?: string; productId?: string }) {
+  const cleanId = encodeURIComponent(id.trim());
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
+  };
+
   const endpoints = [
-    `${API_BASE}/admin/packages/${id}`,
-    `http://localhost:5001/api/admin/packages/${id}`,
+    `${API_BASE}/admin/packages/${cleanId}`,
+    `${serverUrl}/api/admin/packages/${cleanId}`,
+    `${API_BASE}/packages/${cleanId}`,
+    `${serverUrl}/api/packages/${cleanId}`,
   ];
+
+  let lastError = 'Failed to update package';
 
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
+        headers,
         body: JSON.stringify(data),
       });
-      if (res.ok) return await res.json();
-    } catch (e) {}
+      const resData = await res.json().catch(() => null);
+      if (res.ok) return resData || { success: true };
+      if (resData?.error) lastError = resData.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
   }
-  throw new Error('Failed to update package');
+  throw new Error(lastError);
 }
 
 export async function deleteAdminProduct(id: string) {

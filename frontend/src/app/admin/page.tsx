@@ -217,6 +217,7 @@ export default function AdminDashboard() {
         finalImg = await uploadImageToServer(editPkgFile);
       }
       await updateAdminPackage(editingPackageModal.pkg.id, {
+        productId: editingPackageModal.product.id,
         name: editPkgName,
         amount: parseInt(editPkgAmount, 10),
         price: parseFloat(editPkgPrice),
