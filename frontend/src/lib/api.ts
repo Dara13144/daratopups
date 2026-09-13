@@ -516,12 +516,20 @@ export async function addAdminStock(packageId: string, codes: string) {
   throw new Error('Failed to add stock codes');
 }
 
-export async function addAdminProduct(name: string, category: string, image?: string) {
+export async function addAdminProduct(
+  name: string,
+  category: string,
+  image?: string,
+  slug?: string,
+  packages?: any[],
+  autoSeedPackages: boolean = true
+) {
   const endpoints = [
     `${API_BASE}/admin/products`,
     'http://localhost:5001/api/admin/products',
   ];
 
+  let lastError = 'Failed to create product';
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
@@ -530,12 +538,16 @@ export async function addAdminProduct(name: string, category: string, image?: st
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ name, category, image }),
+        body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages }),
       });
       if (res.ok) return await res.json();
-    } catch (e) {}
+      const err = await res.json().catch(() => ({}));
+      if (err.error) lastError = err.error;
+    } catch (e: any) {
+      if (e.message) lastError = e.message;
+    }
   }
-  throw new Error('Failed to create product');
+  throw new Error(lastError);
 }
 
 export async function uploadAdminImage(file: File): Promise<{ url: string; message: string }> {

@@ -48,6 +48,8 @@ export default function AdminDashboard() {
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [newVoucherCodes, setNewVoucherCodes] = useState('');
   const [newProductName, setNewProductName] = useState('');
+  const [newProductSlug, setNewProductSlug] = useState('');
+  const [autoSeedPackages, setAutoSeedPackages] = useState(true);
   const [newProductCategory, setNewProductCategory] = useState('MOBILE_GAME');
   const [newProductImage, setNewProductImage] = useState('');
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
@@ -420,10 +422,22 @@ export default function AdminDashboard() {
     try {
       let imageUrl = newProductImage;
       if (productImageFile) imageUrl = await uploadImageToServer(productImageFile);
-      const res = await addAdminProduct(newProductName, newProductCategory, imageUrl || undefined);
-      setSuccess(res.message || 'Product created');
-      setNewProductName(''); setNewProductImage(''); setProductImageFile(null); setProductImagePreview('');
+      const res = await addAdminProduct(
+        newProductName.trim(),
+        newProductCategory,
+        imageUrl || undefined,
+        newProductSlug.trim() || undefined,
+        undefined,
+        autoSeedPackages
+      );
+      const createdProd = res.product;
+      const gameTitle = createdProd?.name || newProductName;
+      setSuccess(`Game "${gameTitle}" created successfully with ${createdProd?.packages?.length || 6} top-up packages!`);
+      setNewProductName(''); setNewProductSlug(''); setNewProductImage(''); setProductImageFile(null); setProductImagePreview('');
       await loadAllData();
+      if (createdProd?.id) {
+        setSelectedProductId(createdProd.id);
+      }
     } catch (err: any) { setError('Failed: ' + err.message); }
     finally { setActionLoading(false); }
   };
@@ -874,40 +888,164 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {/* Add Product */}
                   <div className={`${panelCls} p-5`} style={panelBg}>
-                    <h3 className="text-white font-extrabold text-sm mb-5 flex items-center space-x-2"><Plus className="h-4 w-4 text-cyan-400" /><span>Add Game Product</span></h3>
+                    <div className="flex items-center justify-between mb-5">
+                      <h3 className="text-white font-extrabold text-sm flex items-center space-x-2">
+                        <Plus className="h-4 w-4 text-cyan-400" />
+                        <span>Add New Game</span>
+                      </h3>
+                      <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full font-bold">
+                        Live Catalog
+                      </span>
+                    </div>
+
                     <form onSubmit={handleCreateProduct} className="space-y-4">
-                      <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Product Name</label>
-                        <input type="text" required placeholder="e.g. Free Fire, Mobile Legends" value={newProductName} onChange={e=>setNewProductName(e.target.value)} className={inputCls} /></div>
-                      <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Category</label>
-                        <select value={newProductCategory} onChange={e=>setNewProductCategory(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs">
-                          <option value="MOBILE_GAME">Mobile Game</option><option value="PC_GAME">PC Game</option><option value="VOUCHER">Voucher</option>
-                        </select></div>
-                      {/* Drag & Drop */}
-                      <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Product Image</label>
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Game Name / Title</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Free Fire, Mobile Legends, PUBG Mobile"
+                          value={newProductName}
+                          onChange={e => {
+                            setNewProductName(e.target.value);
+                            if (!newProductSlug) {
+                              // live auto suggestion
+                            }
+                          }}
+                          className={inputCls}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Category</label>
+                          <select
+                            value={newProductCategory}
+                            onChange={e => setNewProductCategory(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500 text-xs"
+                          >
+                            <option value="MOBILE_GAME">🎮 Mobile Game</option>
+                            <option value="PC_GAME">🖥️ PC Game</option>
+                            <option value="VOUCHER">🎟️ Voucher / Card</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 font-semibold mb-1.5 text-xs">
+                            Custom Slug <span className="text-slate-600 font-normal">(optional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={newProductName ? newProductName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : 'e.g. pubg-mobile'}
+                            value={newProductSlug}
+                            onChange={e => setNewProductSlug(e.target.value)}
+                            className={inputCls}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Instant Starter Packages Checkbox */}
+                      <div className="rounded-xl p-3 bg-slate-950/70 border border-slate-800 flex items-start space-x-2.5">
+                        <input
+                          id="autoSeedCheck"
+                          type="checkbox"
+                          checked={autoSeedPackages}
+                          onChange={e => setAutoSeedPackages(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                        />
+                        <label htmlFor="autoSeedCheck" className="text-xs text-slate-300 cursor-pointer">
+                          <span className="font-bold text-white block">Auto-generate 6 Starter Top-Up Packages</span>
+                          <span className="text-[11px] text-slate-400">Creates 50, 100, 250, 500, 1000, and 2000 Diamonds packages so top-ups work immediately.</span>
+                        </label>
+                      </div>
+
+                      {/* Drag & Drop Artwork */}
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Game Artwork / Icon</label>
                         <div
-                          onDragOver={e=>{e.preventDefault();setIsDragging(true);}}
-                          onDragLeave={()=>setIsDragging(false)}
-                          onDrop={e=>{e.preventDefault();setIsDragging(false);const f=e.dataTransfer.files[0];if(f)handleImageFileDrop(f);}}
-                          onClick={()=>fileInputRef.current?.click()}
+                          onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                          onDragLeave={() => setIsDragging(false)}
+                          onDrop={e => {
+                            e.preventDefault();
+                            setIsDragging(false);
+                            const f = e.dataTransfer.files[0];
+                            if (f) handleImageFileDrop(f);
+                          }}
+                          onClick={() => fileInputRef.current?.click()}
                           className="cursor-pointer rounded-xl flex flex-col items-center justify-center p-5 text-center transition-all"
-                          style={{ border:`2px dashed ${isDragging?'#06b6d4':'#334155'}`, background:isDragging?'rgba(6,182,212,.06)':'rgba(15,23,42,.4)' }}>
-                          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)handleImageFileDrop(f);}} />
-                          {productImagePreview?(
+                          style={{
+                            border: `2px dashed ${isDragging ? '#06b6d4' : '#334155'}`,
+                            background: isDragging ? 'rgba(6,182,212,.06)' : 'rgba(15,23,42,.4)',
+                          }}
+                        >
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const f = e.target.files?.[0];
+                              if (f) handleImageFileDrop(f);
+                            }}
+                          />
+                          {productImagePreview ? (
                             <div className="relative">
-                              <img src={productImagePreview} alt="Preview" className="h-20 w-20 rounded-xl object-cover mx-auto mb-2 shadow-lg" />
-                              <button type="button" onClick={e=>{e.stopPropagation();setProductImageFile(null);setProductImagePreview('');}} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center"><X className="h-3 w-3"/></button>
+                              <img src={productImagePreview} alt="Preview" className="h-20 w-20 rounded-xl object-cover mx-auto mb-2 shadow-lg border border-slate-700" />
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setProductImageFile(null);
+                                  setProductImagePreview('');
+                                }}
+                                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
                               <p className="text-slate-400 text-[10px] mt-1">{productImageFile?.name}</p>
                             </div>
-                          ):(
-                            <><div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center mb-2"><ImageIcon className="h-5 w-5 text-slate-500"/></div>
-                            <p className="text-slate-400 font-semibold text-[11px]">Drag & drop or click to upload</p>
-                            <p className="text-slate-600 text-[10px] mt-0.5">PNG, JPG, WebP · Max 5MB</p></>
+                          ) : (
+                            <>
+                              <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center mb-2">
+                                <ImageIcon className="h-5 w-5 text-slate-500" />
+                              </div>
+                              <p className="text-slate-400 font-semibold text-[11px]">Drag & drop or click to upload cover</p>
+                              <p className="text-slate-600 text-[10px] mt-0.5">PNG, JPG, WebP, SVG · Max 10MB</p>
+                            </>
                           )}
                         </div>
-                        {!productImagePreview&&<input type="text" placeholder="Or paste image URL..." value={newProductImage} onChange={e=>setNewProductImage(e.target.value)} className={`${inputCls} mt-2`} />}
+                        {!productImagePreview && (
+                          <input
+                            type="text"
+                            placeholder="Or paste image URL (e.g. /images/games/pubg.png)..."
+                            value={newProductImage}
+                            onChange={e => setNewProductImage(e.target.value)}
+                            className={`${inputCls} mt-2`}
+                          />
+                        )}
                       </div>
-                      <button type="submit" disabled={actionLoading||uploadingImage} className="w-full flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-white font-bold text-xs disabled:opacity-50 transition-all" style={btnGrad}>
-                        {uploadingImage?<><div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"/><span>Uploading...</span></>:<><Plus className="h-3.5 w-3.5"/><span>Create Product</span></>}
+
+                      <button
+                        type="submit"
+                        disabled={actionLoading || uploadingImage}
+                        className="w-full flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-white font-bold text-xs disabled:opacity-50 transition-all cursor-pointer shadow-lg hover:brightness-110 active:scale-[0.99]"
+                        style={btnGrad}
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Uploading image...</span>
+                          </>
+                        ) : actionLoading ? (
+                          <>
+                            <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Creating Game...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Create Game & Launch</span>
+                          </>
+                        )}
                       </button>
                     </form>
                   </div>
