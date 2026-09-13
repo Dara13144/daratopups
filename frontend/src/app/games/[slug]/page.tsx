@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GameIcon from '../../../components/GameIcon';
-import { fetchProduct, createOrder, lookupNickname, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
-import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles, UserCheck, Send } from 'lucide-react';
+import { fetchProduct, createOrder, lookupNickname, lookupPlayerProfile, PlayerProfile, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
+import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles, UserCheck, Send, Search, RefreshCw, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
@@ -95,11 +95,13 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
   const [packageCategoryFilter, setPackageCategoryFilter] = useState<'ALL' | 'DIAMONDS' | 'PASSES' | 'SPECIALS'>('ALL');
   const { t } = useLanguage();
   
-  // Player credentials inputs
+  // Player credentials inputs & rich game profile
   const [playerId, setPlayerId] = useState('');
   const [playerZoneId, setPlayerZoneId] = useState('');
   const [autoNickname, setAutoNickname] = useState('');
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [checkingName, setCheckingName] = useState(false);
+  const [checkNameError, setCheckNameError] = useState('');
 
   // Form states
   const [loading, setLoading] = useState(true);
@@ -132,28 +134,60 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       });
   }, [slug]);
 
+  // Dedicated Check Name Action
+  const handlePerformCheckName = async () => {
+    const cleanId = playerId.trim();
+    if (!cleanId || cleanId.length < 3) {
+      setCheckNameError('សូមបញ្ចូល Player ID យ៉ាងតិច 3 ខ្ទង់ (Please enter a valid Player ID)');
+      return;
+    }
+    const isMLBB = slug === 'mobile-legends' || slug === 'moonton-mlbb' || slug.startsWith('mobile-legends-');
+    if (isMLBB && (!playerZoneId.trim() || playerZoneId.trim().length < 3)) {
+      setCheckNameError('សូមបញ្ចូល Zone ID (Please enter Zone ID)');
+      return;
+    }
+
+    setCheckingName(true);
+    setCheckNameError('');
+    try {
+      const profile = await lookupPlayerProfile(slug, cleanId, playerZoneId.trim());
+      if (profile) {
+        setPlayerProfile(profile);
+        setAutoNickname(profile.nickname);
+      }
+    } catch (err: any) {
+      setCheckNameError(err.message || 'មិនអាចផ្ទៀងផ្ទាត់ឈ្មោះបានទេ (Check name failed)');
+    } finally {
+      setCheckingName(false);
+    }
+  };
+
   // Automatic Debounced Player Name Verification
   useEffect(() => {
     const cleanId = playerId.trim();
     if (!slug || cleanId.length < 3) {
       setAutoNickname('');
+      setPlayerProfile(null);
       setCheckingName(false);
       return;
     }
 
-    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
+    const isMLBB = slug === 'mobile-legends' || slug === 'moonton-mlbb' || slug.startsWith('mobile-legends-');
     if (isMLBB && (!playerZoneId.trim() || playerZoneId.trim().length < 3)) {
       setAutoNickname('');
+      setPlayerProfile(null);
       setCheckingName(false);
       return;
     }
 
     setCheckingName(true);
+    setCheckNameError('');
     const timer = setTimeout(async () => {
       try {
-        const name = await lookupNickname(slug, cleanId, playerZoneId.trim());
-        if (name) {
-          setAutoNickname(name);
+        const profile = await lookupPlayerProfile(slug, cleanId, playerZoneId.trim());
+        if (profile) {
+          setPlayerProfile(profile);
+          setAutoNickname(profile.nickname);
         }
       } catch {
         // Non-blocking auto check
@@ -296,19 +330,26 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
           {/* Column 1 & 2: Steps Form */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             
-            {/* STEP 1: Enter Player ID */}
-            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-md rounded-2xl sm:rounded-3xl">
-              <div className="flex items-center space-x-2 mb-3 sm:mb-4">
-                <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
-                  1
+            {/* STEP 1: Enter Player ID & Live Profile Verification */}
+            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-xl rounded-2xl sm:rounded-3xl relative overflow-hidden">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="flex items-center space-x-2">
+                  <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
+                    1
+                  </span>
+                  <h3 className="text-white font-extrabold text-sm sm:text-base">{t.enterAccountDetails}</h3>
+                </div>
+                <span className="text-[10px] uppercase font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Zap className="h-3 w-3" />
+                  <span>Auto-Verify</span>
                 </span>
-                <h3 className="text-white font-extrabold text-sm sm:text-base">{t.enterAccountDetails}</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-slate-300 text-xs font-bold mb-1.5">
-                    {t.playerId}
+                  <label className="block text-slate-300 text-xs font-bold mb-1.5 flex items-center justify-between">
+                    <span>{t.playerId}</span>
+                    <span className="text-[10px] text-slate-500 font-normal">e.g. 12345678</span>
                   </label>
                   <input
                     type="text"
@@ -320,10 +361,11 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                   />
                 </div>
 
-                {(product.slug === 'mobile-legends' || product.slug.startsWith('mobile-legends-')) && (
+                {(product.slug === 'mobile-legends' || product.slug === 'moonton-mlbb' || product.slug.startsWith('mobile-legends-')) ? (
                   <div>
-                    <label className="block text-slate-300 text-xs font-bold mb-1.5">
-                      {t.zoneId}
+                    <label className="block text-slate-300 text-xs font-bold mb-1.5 flex items-center justify-between">
+                      <span>{t.zoneId}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">e.g. 1234</span>
                     </label>
                     <input
                       type="text"
@@ -333,25 +375,123 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                       className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                     />
                   </div>
+                ) : (
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={handlePerformCheckName}
+                      disabled={checkingName || !playerId.trim()}
+                      className="w-full flex items-center justify-center space-x-1.5 py-3 sm:py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all disabled:opacity-40 cursor-pointer min-h-[44px]"
+                    >
+                      {checkingName ? (
+                        <>
+                          <div className="h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                          <span>កំពុងពិនិត្យឈ្មោះ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4" />
+                          <span>ពិនិត្យឈ្មោះ (Check Name)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* Automatic Nickname Indicator */}
-              {checkingName && (
-                <div className="mt-3 flex items-center space-x-2 bg-blue-950/60 border border-blue-800/80 rounded-xl px-3.5 py-2 animate-pulse">
-                  <div className="h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
-                  <span className="text-blue-300 font-bold text-xs">កំពុងស្វែងរកឈ្មោះស្វ័យប្រវត្តិ...</span>
+              {(product.slug === 'mobile-legends' || product.slug === 'moonton-mlbb' || product.slug.startsWith('mobile-legends-')) && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handlePerformCheckName}
+                    disabled={checkingName || !playerId.trim() || !playerZoneId.trim()}
+                    className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all disabled:opacity-40 cursor-pointer min-h-[40px]"
+                  >
+                    {checkingName ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                        <span>កំពុងស្វែងរកឈ្មោះគណនី (Verifying Account)...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-4 w-4" />
+                        <span>ពិនិត្យឈ្មោះគណនី (Check Player Profile)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
 
-              {!checkingName && autoNickname && (
-                <div className="mt-3 flex items-center space-x-2.5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl px-3.5 py-2.5 shadow-xs">
-                  <div className="h-6 w-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0">
-                    <CheckCircle className="h-4 w-4 stroke-[2.5]" />
+              {/* Loading State */}
+              {checkingName && (
+                <div className="mt-4 flex items-center space-x-3 bg-cyan-950/40 border border-cyan-500/30 rounded-2xl p-3.5 animate-pulse">
+                  <div className="h-5 w-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
+                  <div>
+                    <p className="text-cyan-300 font-bold text-xs">កំពុងផ្ទៀងផ្ទាត់ឈ្មោះគណនីហ្គេម (Verifying with Game Server)...</p>
+                    <p className="text-slate-400 text-[10px]">សូមរង់ចាំមួយភ្លែត ប្រព័ន្ធកំពុងទាញយកទិន្នន័យ Profile ផ្ទាល់</p>
                   </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider">ឈ្មោះគណនី (Verified Nickname)</span>
-                    <strong className="text-white font-extrabold text-xs sm:text-sm">{autoNickname}</strong>
+                </div>
+              )}
+
+              {/* Error Notice */}
+              {checkNameError && !checkingName && (
+                <div className="mt-4 flex items-start space-x-2.5 bg-red-950/40 border border-red-500/30 rounded-2xl p-3 text-left">
+                  <ShieldAlert className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-red-300 font-medium text-xs">{checkNameError}</p>
+                </div>
+              )}
+
+              {/* ══ GLOW GAME PROFILE CARD ════════════════════════════════════ */}
+              {!checkingName && (playerProfile || autoNickname) && (
+                <div className="mt-4 rounded-2xl sm:rounded-3xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/50 via-slate-900/90 to-slate-950/80 p-4 sm:p-5 shadow-[0_0_25px_rgba(16,185,129,0.15)] relative overflow-hidden text-left">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    {/* Avatar & Player Info */}
+                    <div className="flex items-center space-x-3.5 min-w-0 flex-1">
+                      <div className="relative shrink-0">
+                        <img
+                          src={playerProfile?.avatarUrl || product.image || '/images/games/freefire.png'}
+                          alt="Avatar"
+                          className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl object-cover border-2 border-emerald-400/60 shadow-md bg-slate-950 p-0.5"
+                          onError={(e) => { (e.target as HTMLImageElement).src = '/images/games/freefire.png'; }}
+                        />
+                        <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-md">
+                          <CheckCircle className="h-3.5 w-3.5 stroke-[3]" />
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-2 flex-wrap">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" />
+                            <span>Verified Player</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            ID: {playerId}{playerZoneId ? ` (${playerZoneId})` : ''}
+                          </span>
+                        </div>
+
+                        <h4 className="text-white font-black text-sm sm:text-base truncate mt-0.5 tracking-tight text-shadow-sm">
+                          {playerProfile?.nickname || autoNickname}
+                        </h4>
+
+                        <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
+                          <span className="text-emerald-300 font-semibold">📍 {playerProfile?.region || 'Cambodia (Asia)'}</span>
+                          {playerProfile?.level && (
+                            <span className="text-cyan-300 font-semibold">⚡ Lv. {playerProfile.level}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Re-check Action */}
+                    <button
+                      type="button"
+                      onClick={handlePerformCheckName}
+                      className="self-end sm:self-center shrink-0 flex items-center space-x-1 text-[11px] font-bold text-slate-400 hover:text-cyan-400 bg-slate-950/60 hover:bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 transition-all cursor-pointer"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      <span>ផ្ទៀងផ្ទាត់ឡើងវិញ (Re-check)</span>
+                    </button>
                   </div>
                 </div>
               )}
