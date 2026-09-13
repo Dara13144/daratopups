@@ -349,30 +349,36 @@ export default function LoginPage() {
           setIsRegisterMode(false);
         }
       } else {
-        // Login flow
+        // Login flow: Try Backend API first
         try {
           const data = await login(email.trim(), password);
           handleAuthSuccess(data);
           return;
         } catch (apiErr: any) {
-          // Fallback to Supabase Password Login
-          const sbData = await signInWithSupabaseEmail(email.trim(), password);
-          if (sbData.session) {
-            handleAuthSuccess({
-              token: sbData.session.access_token,
-              user: {
-                email: sbData.user?.email || email.trim(),
-                role: email.trim().toLowerCase() === 'mdara9695@gmail.com' ? 'ADMIN' : 'USER',
-              },
-            });
-            return;
+          // Fallback to Supabase Password Login if backend API failed
+          try {
+            const sbData = await signInWithSupabaseEmail(email.trim(), password);
+            if (sbData?.session) {
+              const userEmail = (sbData.user?.email || email.trim()).toLowerCase();
+              const isAdmin = userEmail === 'mdara9695@gmail.com' || userEmail === 'admin@topup.com' || userEmail === 'admin@nadytopup.com';
+              handleAuthSuccess({
+                token: sbData.session.access_token,
+                user: {
+                  email: userEmail,
+                  role: isAdmin ? 'ADMIN' : 'USER',
+                },
+              });
+              return;
+            }
+          } catch (sbErr) {
+            // Ignore Supabase fallback error and show direct API error
           }
-          throw apiErr;
+          throw new Error(apiErr.message || 'Invalid email or password');
         }
       }
     } catch (err: any) {
-      console.error('Email authentication error:', err);
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+      console.warn('Authentication notice:', err.message || err);
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
