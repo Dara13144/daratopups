@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: robbytopupv2-backend
+    name: nadybackend
     env: node
     region: singapore
     plan: free
@@ -16,12 +16,12 @@ services:
       - key: SANDBOX_MODE
         value: "false"
       - key: BACKEND_URL
-        value: https://robbytopupv2-backend.onrender.com
+        value: https://nadybackend.onrender.com
       - key: FRONTEND_URL
-        value: https://robbytopupv2-frontend.onrender.com
+        value: https://nadyfrontend.onrender.com
 
   - type: web
-    name: robbytopupv2-frontend
+    name: nadyfrontend
     env: node
     region: singapore
     plan: free
@@ -34,8 +34,8 @@ services:
       - key: PORT
         value: 3000
       - key: NEXT_PUBLIC_API_URL
-        value: https://robbytopupv2-backend.onrender.com
+        value: https://nadybackend.onrender.com
       - key: NEXT_PUBLIC_BACKEND_URL
-        value: https://robbytopupv2-backend.onrender.com
+        value: https://nadybackend.onrender.com
       - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        value: "206329302084-3fm2qg6o3r48f8hsi3n7pthefuoh3ggt.apps.googleusercontent.com"
+        value: "206329302084-7h656a65vmoeusu10c0cor9lvbp3042v.apps.googleusercontent.com"

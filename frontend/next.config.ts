@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'nadybackend.onrender.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'robbytopupv2-backend.onrender.com',
       },
       {
@@ -26,7 +30,7 @@ const nextConfig: NextConfig = {
 
   // Safety net: bake the production API URL in at build time even if env var is missing
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://robbytopupv2-backend.onrender.com',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://nadybackend.onrender.com',
   },
 
   // Fix turbopack root warning — point to the frontend directory
