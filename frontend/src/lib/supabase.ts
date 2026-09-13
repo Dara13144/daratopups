@@ -133,8 +133,9 @@ export async function getSupabaseUser() {
  */
 export function subscribeToOrderRealtime(
   paymentTxnId: string,
-  onOrderUpdate: (payload: any) => void
+  onOrderUpdate: (order: any) => void
 ) {
+  if (typeof window === 'undefined' || !paymentTxnId) return () => {};
   try {
     const client = getSupabaseClient();
     const uniqueChannelName = `order-rt-${paymentTxnId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -178,6 +179,7 @@ export function subscribeToOrderRealtime(
  * Real-time listener for Product updates or live catalog sync
  */
 export function subscribeToProductsRealtime(onProductChange: (payload: any) => void) {
+  if (typeof window === 'undefined') return () => {};
   try {
     const client = getSupabaseClient();
     const uniqueChannelName = `products-catalog-rt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
