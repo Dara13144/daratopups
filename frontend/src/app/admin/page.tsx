@@ -6,7 +6,7 @@ import {
   fetchAdminStats, fetchAdminOrders, updateAdminOrderStatus,
   fetchAdminStock, addAdminStock, fetchProducts, GameProduct,
   addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage,
-  updateAdminProduct, updateAdminPackage,
+  updateAdminProduct, updateAdminPackage, uploadAdminImage,
   downloadAdminBackup, createAdminSnapshot, fetchAdminSnapshots,
   restoreAdminBackup, deleteAdminSnapshot,
   serverUrl, API_BASE
@@ -66,6 +66,10 @@ export default function AdminDashboard() {
   const [newPackagePrice, setNewPackagePrice] = useState('');
   const [newPackageCategory, setNewPackageCategory] = useState('NORMAL');
   const [newPackageBadge, setNewPackageBadge] = useState('');
+  const [newPackageImage, setNewPackageImage] = useState('');
+  const [newPackageFile, setNewPackageFile] = useState<File | null>(null);
+  const [newPackagePreview, setNewPackagePreview] = useState('');
+  const newPackageFileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -91,6 +95,10 @@ export default function AdminDashboard() {
   const [editPkgPrice, setEditPkgPrice] = useState('');
   const [editPkgCategory, setEditPkgCategory] = useState('NORMAL');
   const [editPkgBadge, setEditPkgBadge] = useState('');
+  const [editPkgImage, setEditPkgImage] = useState('');
+  const [editPkgFile, setEditPkgFile] = useState<File | null>(null);
+  const [editPkgPreview, setEditPkgPreview] = useState('');
+  const editPkgFileInputRef = useRef<HTMLInputElement>(null);
   const [editPkgIsActive, setEditPkgIsActive] = useState(true);
 
   // Quick Add Package to Game Modal State
@@ -100,6 +108,10 @@ export default function AdminDashboard() {
   const [directPkgPrice, setDirectPkgPrice] = useState('');
   const [directPkgCategory, setDirectPkgCategory] = useState('NORMAL');
   const [directPkgBadge, setDirectPkgBadge] = useState('');
+  const [directPkgImage, setDirectPkgImage] = useState('');
+  const [directPkgFile, setDirectPkgFile] = useState<File | null>(null);
+  const [directPkgPreview, setDirectPkgPreview] = useState('');
+  const directPkgFileInputRef = useRef<HTMLInputElement>(null);
 
   const openAddPackageModalForGame = (prod: GameProduct) => {
     setAddPackageModalProd(prod);
@@ -108,6 +120,9 @@ export default function AdminDashboard() {
     setDirectPkgPrice('');
     setDirectPkgCategory('NORMAL');
     setDirectPkgBadge('');
+    setDirectPkgImage('');
+    setDirectPkgFile(null);
+    setDirectPkgPreview('');
   };
 
   const handleSaveDirectPackageModal = async (e: React.FormEvent) => {
@@ -115,13 +130,18 @@ export default function AdminDashboard() {
     if (!addPackageModalProd) return;
     setActionLoading(true); setError(''); setSuccess('');
     try {
+      let finalImg = directPkgImage;
+      if (directPkgFile) {
+        finalImg = await uploadImageToServer(directPkgFile);
+      }
       await addAdminPackage(
         addPackageModalProd.id,
         directPkgName,
         parseInt(directPkgAmount, 10),
         parseFloat(directPkgPrice),
         directPkgCategory,
-        directPkgBadge || undefined
+        directPkgBadge || undefined,
+        finalImg || undefined
       );
       setSuccess(`Package "${directPkgName}" added to ${addPackageModalProd.name} successfully!`);
       setAddPackageModalProd(null);
@@ -181,6 +201,9 @@ export default function AdminDashboard() {
     setEditPkgPrice(String(pkg.price));
     setEditPkgCategory(pkg.category || 'NORMAL');
     setEditPkgBadge(pkg.badge || '');
+    setEditPkgImage(pkg.image || '');
+    setEditPkgFile(null);
+    setEditPkgPreview('');
     setEditPkgIsActive(pkg.isActive !== false);
   };
 
@@ -189,12 +212,17 @@ export default function AdminDashboard() {
     if (!editingPackageModal) return;
     setActionLoading(true); setError(''); setSuccess('');
     try {
+      let finalImg = editPkgImage;
+      if (editPkgFile) {
+        finalImg = await uploadImageToServer(editPkgFile);
+      }
       await updateAdminPackage(editingPackageModal.pkg.id, {
         name: editPkgName,
         amount: parseInt(editPkgAmount, 10),
         price: parseFloat(editPkgPrice),
         category: editPkgCategory,
         badge: editPkgBadge || '',
+        image: finalImg || undefined,
         isActive: editPkgIsActive,
       });
       setSuccess(`Package "${editPkgName}" updated successfully!`);
@@ -421,9 +449,22 @@ export default function AdminDashboard() {
     if (!selectedProductId || !newPackageName.trim() || !newPackageAmount || !newPackagePrice) { setError('All fields required'); return; }
     setActionLoading(true); setError(''); setSuccess('');
     try {
-      const res = await addAdminPackage(selectedProductId, newPackageName, parseInt(newPackageAmount, 10), parseFloat(newPackagePrice), newPackageCategory, newPackageBadge || undefined);
+      let finalImg = newPackageImage;
+      if (newPackageFile) {
+        finalImg = await uploadImageToServer(newPackageFile);
+      }
+      const res = await addAdminPackage(
+        selectedProductId,
+        newPackageName,
+        parseInt(newPackageAmount, 10),
+        parseFloat(newPackagePrice),
+        newPackageCategory,
+        newPackageBadge || undefined,
+        finalImg || undefined
+      );
       setSuccess(res.message || 'Package created');
       setNewPackageName(''); setNewPackageAmount(''); setNewPackagePrice(''); setNewPackageCategory('NORMAL'); setNewPackageBadge('');
+      setNewPackageImage(''); setNewPackageFile(null); setNewPackagePreview('');
       await loadAllData();
     } catch (err: any) { setError('Failed: ' + err.message); }
     finally { setActionLoading(false); }
@@ -462,11 +503,20 @@ export default function AdminDashboard() {
     return <span className={`${b} bg-red-500/10 text-red-400 border-red-500/20`}>✗ FAILED</span>;
   };
 
-  const getProductImgSrc = (img: string) => {
+  const getProductImgSrc = (img?: string | null) => {
     if (!img) return 'https://placehold.co/48x48/1e293b/94a3b8?text=IMG';
     if (img.startsWith('http') || img.startsWith('blob')) return img;
-    if (img.startsWith('/uploads')) return `${API_BASE}${img}`;
-    return img;
+    if (img.startsWith('/uploads')) return `${API_BASE.replace(/\/api$/, '')}${img}`;
+    if (img.startsWith('/')) return img;
+    return `${API_BASE.replace(/\/api$/, '')}/${img}`;
+  };
+
+  const getPkgImgSrc = (img?: string | null) => {
+    if (!img) return '/images/diamond-art.png';
+    if (img.startsWith('http') || img.startsWith('blob')) return img;
+    if (img.startsWith('/uploads')) return `${API_BASE.replace(/\/api$/, '')}${img}`;
+    if (img.startsWith('/')) return img;
+    return `${API_BASE.replace(/\/api$/, '')}/${img}`;
   };
 
   const navItems = [
@@ -883,6 +933,53 @@ export default function AdminDashboard() {
                         </select></div>
                       <div><label className="block text-slate-400 font-semibold mb-1.5 text-xs">Badge (optional)</label>
                         <input type="text" placeholder="e.g. 🔥 Best Value" value={newPackageBadge} onChange={e=>setNewPackageBadge(e.target.value)} className={inputCls}/></div>
+
+                      {/* Package Artwork / Custom Icon Upload */}
+                      <div>
+                        <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Icon / Artwork (optional)</label>
+                        <div
+                          onClick={() => newPackageFileInputRef.current?.click()}
+                          className="cursor-pointer rounded-xl flex items-center justify-between p-2.5 border border-dashed border-slate-700 bg-slate-950/60 hover:border-cyan-500 transition-all mb-2"
+                        >
+                          <input
+                            ref={newPackageFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={e => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setNewPackageFile(f);
+                                setNewPackagePreview(URL.createObjectURL(f));
+                              }
+                            }}
+                          />
+                          <div className="flex items-center space-x-2.5">
+                            <img
+                              src={newPackagePreview || getPkgImgSrc(newPackageImage)}
+                              alt="Pkg Icon"
+                              className="h-8 w-8 rounded-lg object-contain p-0.5 bg-slate-900 border border-slate-800"
+                            />
+                            <div>
+                              <p className="text-xs font-bold text-white">
+                                {newPackageFile ? newPackageFile.name : 'Upload custom diamond / item icon'}
+                              </p>
+                              <p className="text-[10px] text-slate-500">PNG, JPG, WebP supported</p>
+                            </div>
+                          </div>
+                          <Upload className="h-4 w-4 text-cyan-400 mr-1" />
+                        </div>
+                        {!newPackagePreview && (
+                          <input
+                            type="text"
+                            placeholder="Or icon path (e.g. /images/diamond-art.png)"
+                            value={newPackageImage}
+                            onChange={e => setNewPackageImage(e.target.value)}
+                            className={inputCls}
+                          />
+                        )}
+                      </div>
+
                       <button type="submit" disabled={actionLoading} className="w-full flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-white font-bold text-xs disabled:opacity-50 transition-all" style={btnGrad}>
                         <Plus className="h-3.5 w-3.5"/><span>Create Package</span>
                       </button>
@@ -918,7 +1015,7 @@ export default function AdminDashboard() {
                       <select
                         value={productCategoryFilter}
                         onChange={e => setProductCategoryFilter(e.target.value)}
-                        className="bg-slate-950 border border-slate-800 rounded-lg text-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:border-cyan-500"
+                        className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:border-cyan-500 text-xs"
                       >
                         <option value="ALL">All Categories</option>
                         <option value="MOBILE_GAME">Mobile Games</option>
@@ -1031,8 +1128,15 @@ export default function AdminDashboard() {
                                       className="group relative border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition-all bg-slate-950/60 flex flex-col justify-between"
                                     >
                                       <div>
-                                        <div className="flex items-center justify-between mb-1.5">
-                                          <span className="text-white font-bold text-xs truncate pr-2">{pkg.name}</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <img
+                                              src={getPkgImgSrc(pkg.image)}
+                                              alt={pkg.name}
+                                              className="h-6 w-6 object-contain rounded shrink-0 bg-slate-900 border border-slate-800 p-0.5"
+                                            />
+                                            <span className="text-white font-bold text-xs truncate">{pkg.name}</span>
+                                          </div>
                                         </div>
                                         <div className="text-cyan-400 font-black text-sm">${pkg.price.toFixed(2)}</div>
                                         <div className="text-[9px] text-slate-400 mt-0.5">Amount: {pkg.amount}</div>
@@ -1297,6 +1401,50 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
+                    {/* Package Artwork / Icon Edit */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Icon / Artwork (optional)</label>
+                      <div
+                        onClick={() => editPkgFileInputRef.current?.click()}
+                        className="cursor-pointer rounded-xl flex items-center justify-between p-2.5 border border-dashed border-slate-700 bg-slate-950/60 hover:border-cyan-500 transition-all mb-2"
+                      >
+                        <input
+                          ref={editPkgFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setEditPkgFile(f);
+                              setEditPkgPreview(URL.createObjectURL(f));
+                            }
+                          }}
+                        />
+                        <div className="flex items-center space-x-2.5">
+                          <img
+                            src={editPkgPreview || getPkgImgSrc(editPkgImage)}
+                            alt="Pkg Icon"
+                            className="h-8 w-8 rounded-lg object-contain p-0.5 bg-slate-900 border border-slate-800"
+                          />
+                          <div>
+                            <p className="text-xs font-bold text-white">
+                              {editPkgFile ? editPkgFile.name : 'Choose diamond / artwork file'}
+                            </p>
+                            <p className="text-[10px] text-slate-500">PNG, JPG, WebP supported</p>
+                          </div>
+                        </div>
+                        <Upload className="h-4 w-4 text-cyan-400 mr-1" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Or icon path (e.g. /images/diamond-art.png)"
+                        value={editPkgImage}
+                        onChange={e => setEditPkgImage(e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
                     {/* Active Status Toggle */}
                     <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
                       <div>
@@ -1415,6 +1563,52 @@ export default function AdminDashboard() {
                           className={inputCls}
                         />
                       </div>
+                    </div>
+
+                    {/* Custom Package Artwork Upload */}
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-xs">Package Icon / Artwork (optional)</label>
+                      <div
+                        onClick={() => directPkgFileInputRef.current?.click()}
+                        className="cursor-pointer rounded-xl flex items-center justify-between p-2.5 border border-dashed border-slate-700 bg-slate-950/60 hover:border-cyan-500 transition-all mb-2"
+                      >
+                        <input
+                          ref={directPkgFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setDirectPkgFile(f);
+                              setDirectPkgPreview(URL.createObjectURL(f));
+                            }
+                          }}
+                        />
+                        <div className="flex items-center space-x-2.5">
+                          <img
+                            src={directPkgPreview || getPkgImgSrc(directPkgImage)}
+                            alt="Pkg Icon"
+                            className="h-8 w-8 rounded-lg object-contain p-0.5 bg-slate-900 border border-slate-800"
+                          />
+                          <div>
+                            <p className="text-xs font-bold text-white">
+                              {directPkgFile ? directPkgFile.name : 'Upload diamond / item icon'}
+                            </p>
+                            <p className="text-[10px] text-slate-500">PNG, JPG, WebP supported</p>
+                          </div>
+                        </div>
+                        <Upload className="h-4 w-4 text-cyan-400 mr-1" />
+                      </div>
+                      {!directPkgPreview && (
+                        <input
+                          type="text"
+                          placeholder="Or icon path (e.g. /images/diamond-art.png)"
+                          value={directPkgImage}
+                          onChange={e => setDirectPkgImage(e.target.value)}
+                          className={inputCls}
+                        />
+                      )}
                     </div>
 
                     {/* Submit Actions */}

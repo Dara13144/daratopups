@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails, API_BASE } from '../../../lib/api';
+import { subscribeToOrderRealtime } from '../../../lib/supabase';
 import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
@@ -124,11 +125,19 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
     fetchStatus(true);
 
+    // 1. Live Supabase Realtime WebSocket listener for instant zero-latency updates
+    const unsubscribe = subscribeToOrderRealtime(txnId, (updatedOrder) => {
+      console.log('[Supabase Realtime] Order status changed:', updatedOrder);
+      fetchStatus(false);
+    });
+
+    // 2. High-reliability polling fallback every 3 seconds
     pollingRef.current = setInterval(() => {
       fetchStatus(false);
     }, 3000);
 
     return () => {
+      unsubscribe();
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [txnId]);

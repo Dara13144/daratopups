@@ -12,6 +12,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
 import AnnouncementTicker from './AnnouncementTicker';
 import { fetchProducts, GameProduct } from '../lib/api';
+import { subscribeToProductsRealtime } from '../lib/supabase';
 
 export default function Header() {
   const router = useRouter();
@@ -36,6 +37,14 @@ export default function Header() {
   // Load games for smart search
   useEffect(() => {
     fetchProducts().then(setAllGames).catch(console.error);
+
+    const unsubscribe = subscribeToProductsRealtime(() => {
+      fetchProducts().then(setAllGames).catch(console.error);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Wait for client-side mount before reading localStorage
@@ -148,24 +157,6 @@ export default function Header() {
               >
                 តាមដាន
               </Link>
-
-              {/* Reseller Program */}
-              <button
-                type="button"
-                onClick={() => setResellerModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white font-bold transition-colors cursor-pointer"
-              >
-                Reseller
-              </button>
-
-              {/* Creator Program */}
-              <button
-                type="button"
-                onClick={() => setCreatorModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white font-bold transition-colors cursor-pointer"
-              >
-                Creator
-              </button>
 
               {/* FAQ */}
               <button
@@ -665,38 +656,6 @@ export default function Header() {
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-600" />
               </Link>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setResellerModalOpen(true);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all text-left cursor-pointer"
-              >
-                <div className="flex items-center space-x-3">
-                  <Users className="h-4 w-4 text-cyan-400" />
-                  <span>Reseller Program</span>
-                </div>
-                <span className="text-[10px] font-black bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-800">
-                  VIP
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setCreatorModalOpen(true);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all text-left cursor-pointer"
-              >
-                <div className="flex items-center space-x-3">
-                  <Award className="h-4 w-4 text-amber-400" />
-                  <span>Creator Program</span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-600" />
-              </button>
 
               <button
                 type="button"

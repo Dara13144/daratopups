@@ -34,6 +34,7 @@ export interface GamePackage {
   name: string;
   amount: number;
   price: number;
+  image?: string | null;
   isActive: boolean;
   category: string;
   badge?: string | null;
@@ -117,10 +118,15 @@ import { FALLBACK_PRODUCTS } from './fallbackProducts';
 
 export async function fetchProducts(): Promise<GameProduct[]> {
   try {
-    const res = await fetch(`${API_BASE}/products`);
+    const res = await fetch(`${API_BASE}/products`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) {
+        return data; // Return exact live database products from Supabase
+      }
     }
   } catch (err) {
     console.warn('[API] Failed to fetch live products, using resilient catalog:', err);
@@ -129,17 +135,45 @@ export async function fetchProducts(): Promise<GameProduct[]> {
 }
 
 export async function fetchProduct(slug: string): Promise<GameProduct> {
-  try {
-    const res = await fetch(`${API_BASE}/products/${slug}`);
-    if (res.ok) {
-      return await res.json();
+  const cleanSlug = encodeURIComponent(slug.trim());
+  const endpoints = [
+    `${API_BASE}/products/${cleanSlug}`,
+    `http://localhost:5001/api/products/${cleanSlug}`,
+  ];
+
+  let isExplicit404 = false;
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      if (res.status === 404) {
+        isExplicit404 = true;
+      }
+    } catch (err) {
+      console.warn(`[API] Failed to fetch live product from ${url}:`, err);
     }
-  } catch (err) {
-    console.warn(`[API] Failed to fetch product ${slug}, using fallback:`, err);
   }
-  const fallback = FALLBACK_PRODUCTS.find((p) => p.slug === slug);
-  if (fallback) return fallback;
-  throw new Error('Product not found');
+
+  // If server responded with 404, product was deleted or does not exist
+  if (isExplicit404) {
+    throw new Error('Product not found or has been removed');
+  }
+
+  // If network unreachable, check static catalog fallback
+  const fallback = FALLBACK_PRODUCTS.find(
+    (p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug
+  );
+  if (fallback) {
+    return fallback;
+  }
+
+  throw new Error('Product not found or has been removed');
 }
 
 export async function lookupNickname(
@@ -195,7 +229,11 @@ export async function createOrder(
   playerId: string,
   playerZoneId: string | null,
   paymentMethod: 'ABA' | 'BAKONG' | 'CANADIA',
-  email?: string
+  email?: string,
+  gameSlug?: string,
+  packageName?: string,
+  price?: number,
+  amount?: number
 ): Promise<OrderCreateResponse> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   
@@ -205,10 +243,23 @@ export async function createOrder(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const payload = {
+    packageId,
+    playerId,
+    playerZoneId,
+    paymentMethod,
+    email,
+    gameSlug,
+    productSlug: gameSlug,
+    packageName,
+    price,
+    amount,
+  };
+
   const res = await fetch(`${API_BASE}/orders`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ packageId, playerId, playerZoneId, paymentMethod, email }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -487,13 +538,74 @@ export async function addAdminProduct(name: string, category: string, image?: st
   throw new Error('Failed to create product');
 }
 
+export async function uploadAdminImage(file: File): Promise<{ url: string; message: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const endpoints = [
+    `${API_BASE}/admin/upload-image`,
+    `http://localhost:5001/api/admin/upload-image`,
+  ];
+
+  let lastError = 'Image upload failed';
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+
+      if (res.ok) {
+        return await res.json();
+      }
+      const err = await res.json().catch(() => ({}));
+      lastError = err.error || 'Image upload failed';
+    } catch (e: any) {
+      console.warn(`uploadAdminImage failed on ${url}:`, e);
+    }
+  }
+
+  // Base64 client fallback
+  try {
+    const base64Data: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ imageBase64: base64Data }),
+        });
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch {}
+    }
+
+    return { url: base64Data, message: 'Image loaded' };
+  } catch {}
+
+  throw new Error(lastError);
+}
+
 export async function addAdminPackage(
   productId: string, 
   name: string, 
   amount: number, 
   price: number,
   category: string = 'NORMAL',
-  badge?: string
+  badge?: string,
+  image?: string
 ) {
   const endpoints = [
     `${API_BASE}/admin/products/${productId}/packages`,
@@ -508,7 +620,7 @@ export async function addAdminPackage(
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ name, amount, price, category, badge }),
+        body: JSON.stringify({ name, amount, price, category, badge, image }),
       });
       if (res.ok) return await res.json();
     } catch (e) {}
@@ -538,7 +650,7 @@ export async function updateAdminProduct(id: string, data: { name?: string; cate
   throw new Error('Failed to update product');
 }
 
-export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean }) {
+export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean; image?: string }) {
   const endpoints = [
     `${API_BASE}/admin/packages/${id}`,
     `http://localhost:5001/api/admin/packages/${id}`,

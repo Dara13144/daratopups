@@ -59,7 +59,22 @@ const PassChestIcon = ({ type }: { type: string }) => (
   </div>
 );
 
-const getPackageIcon = (name: string) => {
+const getPackageIcon = (pkgOrName: GamePackage | string) => {
+  if (typeof pkgOrName === 'object' && pkgOrName?.image) {
+    const imgSrc = pkgOrName.image.startsWith('http') || pkgOrName.image.startsWith('/')
+      ? pkgOrName.image
+      : `${API_BASE}${pkgOrName.image}`;
+    return (
+      <div className="h-8 w-9 sm:h-10 sm:w-11 relative flex items-center justify-center shrink-0 rounded-lg overflow-hidden border border-cyan-400/40 shadow-xs bg-slate-900">
+        <img
+          src={imgSrc}
+          alt={pkgOrName.name}
+          className="h-full w-full object-contain p-0.5 rounded hover:scale-110 transition-transform"
+        />
+      </div>
+    );
+  }
+  const name = typeof pkgOrName === 'string' ? pkgOrName : (pkgOrName?.name || '');
   const norm = name.toLowerCase();
   if (norm.includes('evo3d') || norm.includes('3d') || norm.includes('3 day')) return <EvoCardIcon days="3 DAY" />;
   if (norm.includes('evo7d') || norm.includes('7d') || norm.includes('7 day')) return <EvoCardIcon days="7 DAY" />;
@@ -99,6 +114,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
 
   useEffect(() => {
     if (!slug) return;
+    setLoading(true);
+    setError('');
 
     fetchProduct(slug)
       .then((data) => {
@@ -109,8 +126,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Fetch product detail error:', err);
-        setError(`Failed to fetch game top-up configurations from "${API_BASE}". Details: ${err.message || err}`);
+        setProduct(null);
+        setError(err.message || 'Product not found or has been removed');
         setLoading(false);
       });
   }, [slug]);
@@ -177,7 +194,11 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
         playerId,
         playerZoneId || null,
         paymentMethod,
-        email
+        email,
+        slug,
+        selectedPackage.name,
+        selectedPackage.price,
+        selectedPackage.amount
       );
       
       // If mobile, auto-open ABA Mobile application
@@ -446,7 +467,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                               {pkg.name}
                             </div>
                             <div className="shrink-0 scale-90 sm:scale-95 translate-y-0.5">
-                              {getPackageIcon(pkg.name)}
+                              {getPackageIcon(pkg)}
                             </div>
                           </div>
 

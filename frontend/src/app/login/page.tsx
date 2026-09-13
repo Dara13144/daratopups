@@ -5,12 +5,23 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
-import { loginWithGoogle } from '../../lib/api';
+import { loginWithGoogle, login, register } from '../../lib/api';
+import {
+  signInWithSupabaseGoogle,
+  signInWithSupabaseEmail,
+  signUpWithSupabaseEmail,
+  supabase,
+} from '../../lib/supabase';
 import {
   Gamepad2,
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Mail,
+  Lock,
+  UserPlus,
+  LogIn,
+  Sparkles,
 } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID =
@@ -25,6 +36,11 @@ declare global {
 
 export default function LoginPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'google' | 'email'>('google');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -32,12 +48,18 @@ export default function LoginPage() {
   // Centralized authentication success handler
   const handleAuthSuccess = (data: any) => {
     setSuccess('Signed in successfully! Redirecting...');
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user_role', data.user.role);
-    localStorage.setItem('user_email', data.user.email);
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+    }
+    if (data.user?.role) {
+      localStorage.setItem('user_role', data.user.role);
+    }
+    if (data.user?.email) {
+      localStorage.setItem('user_email', data.user.email);
+    }
 
     setTimeout(() => {
-      if (data.user.role === 'ADMIN') {
+      if (data.user?.role === 'ADMIN') {
         router.push('/admin');
       } else {
         router.push('/');
@@ -93,10 +115,42 @@ export default function LoginPage() {
     }
   };
 
+  // Handle Supabase Auth state changes (e.g. OAuth redirect return)
   useEffect(() => {
     initializeGoogleGSI();
 
-    // Catch OAuth direct redirect tokens from URL hash (#access_token=... or ?access_token=...)
+    // 1. Supabase Auth Listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+        const userEmail = session.user.email;
+        if (userEmail && session.access_token) {
+          try {
+            // Synchronize with backend API
+            const data = await loginWithGoogle(
+              session.access_token,
+              userEmail,
+              session.user.user_metadata?.full_name || session.user.user_metadata?.name
+            );
+            handleAuthSuccess(data);
+          } catch (e: any) {
+            console.warn('[Supabase Auth] Sync fallback:', e);
+            // Fallback: Store Supabase session locally
+            localStorage.setItem('token', session.access_token);
+            localStorage.setItem('user_email', userEmail);
+            localStorage.setItem('user_role', userEmail === 'mdara9695@gmail.com' ? 'ADMIN' : 'USER');
+            handleAuthSuccess({
+              token: session.access_token,
+              user: {
+                email: userEmail,
+                role: userEmail === 'mdara9695@gmail.com' ? 'ADMIN' : 'USER',
+              },
+            });
+          }
+        }
+      }
+    });
+
+    // 2. Catch OAuth direct redirect tokens from URL hash (#access_token=... or ?access_token=...)
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.substring(1);
       const search = window.location.search.substring(1);
@@ -106,7 +160,6 @@ export default function LoginPage() {
       const token = accessToken || idToken;
 
       if (token) {
-        // If opened inside popup window, send message to parent window
         if (window.opener && !window.opener.closed) {
           try {
             window.opener.postMessage({ type: 'GOOGLE_OAUTH_TOKEN', token }, window.location.origin);
@@ -133,7 +186,6 @@ export default function LoginPage() {
           });
       }
 
-      // Listen for popup messages from child window
       const handlePopupMessage = async (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         if (event.data?.type === 'GOOGLE_OAUTH_TOKEN' && event.data.token) {
@@ -154,11 +206,18 @@ export default function LoginPage() {
       };
 
       window.addEventListener('message', handlePopupMessage);
-      return () => window.removeEventListener('message', handlePopupMessage);
+      return () => {
+        window.removeEventListener('message', handlePopupMessage);
+        subscription.unsubscribe();
+      };
     }
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Universal Direct Google OAuth Popup Flow (100% immune to FedCM, works on all browsers & origins)
+  // Universal Direct Google OAuth Popup Flow
   const openGoogleOAuthDirect = () => {
     if (typeof window === 'undefined') return;
     setGoogleLoading(true);
@@ -186,20 +245,27 @@ export default function LoginPage() {
     );
 
     if (!popup) {
-      // Fallback if popup is blocked
       window.location.href = authUrl;
     }
   };
 
   // Interactive Google Sign-In button click
-  const handleCustomGoogleClick = () => {
+  const handleCustomGoogleClick = async () => {
     setError('');
     setSuccess('');
 
-    // Method 1: Google Identity Services OAuth2 TokenClient (Standard OAuth popup, bypasses FedCM)
+    // Method 1: Try Supabase OAuth Sign-In first for full ecosystem support
+    try {
+      setGoogleLoading(true);
+      await signInWithSupabaseGoogle();
+      return;
+    } catch (supabaseErr: any) {
+      console.warn('Supabase Google OAuth fallback to Google Identity Services:', supabaseErr?.message);
+    }
+
+    // Method 2: Google Identity Services OAuth2 TokenClient
     if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
       try {
-        setGoogleLoading(true);
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: GOOGLE_CLIENT_ID,
           scope: 'openid email profile',
@@ -233,7 +299,6 @@ export default function LoginPage() {
           error_callback: (err: any) => {
             setGoogleLoading(false);
             console.error('Google OAuth token error:', err);
-            // Fallback to direct OAuth popup if tokenClient fails
             openGoogleOAuthDirect();
           },
         });
@@ -244,8 +309,73 @@ export default function LoginPage() {
       }
     }
 
-    // Method 2: Direct Google OAuth 2.0 Web Flow
+    // Method 3: Direct Google OAuth 2.0 Web Flow
     openGoogleOAuthDirect();
+  };
+
+  // Email / Password Form Submit
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      if (isRegisterMode) {
+        // Try Backend API register first
+        try {
+          const data = await register(email.trim(), password);
+          handleAuthSuccess(data);
+          return;
+        } catch (apiErr: any) {
+          // Fallback to Supabase Sign Up
+          const sbData = await signUpWithSupabaseEmail(email.trim(), password);
+          if (sbData.session) {
+            handleAuthSuccess({
+              token: sbData.session.access_token,
+              user: {
+                email: sbData.user?.email || email.trim(),
+                role: email.trim().toLowerCase() === 'mdara9695@gmail.com' ? 'ADMIN' : 'USER',
+              },
+            });
+            return;
+          }
+          setSuccess('Account created! Please check your email for confirmation or sign in.');
+          setIsRegisterMode(false);
+        }
+      } else {
+        // Login flow
+        try {
+          const data = await login(email.trim(), password);
+          handleAuthSuccess(data);
+          return;
+        } catch (apiErr: any) {
+          // Fallback to Supabase Password Login
+          const sbData = await signInWithSupabaseEmail(email.trim(), password);
+          if (sbData.session) {
+            handleAuthSuccess({
+              token: sbData.session.access_token,
+              user: {
+                email: sbData.user?.email || email.trim(),
+                role: email.trim().toLowerCase() === 'mdara9695@gmail.com' ? 'ADMIN' : 'USER',
+              },
+            });
+            return;
+          }
+          throw apiErr;
+        }
+      }
+    } catch (err: any) {
+      console.error('Email authentication error:', err);
+      setError(err.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -259,17 +389,46 @@ export default function LoginPage() {
 
       <main className="flex-grow flex items-center justify-center py-8 sm:py-16 px-3 sm:px-4 pb-24 md:pb-12 overflow-x-hidden">
         <div className="max-w-md w-full glass-panel p-6 sm:p-8 bg-white border-slate-200 shadow-xl relative rounded-2xl sm:rounded-3xl">
+          
           {/* Header */}
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="inline-flex bg-gradient-to-r from-cyan-500 to-violet-500 p-3 rounded-2xl text-white mb-3.5 shadow-md shadow-cyan-500/25">
+          <div className="text-center mb-6">
+            <div className="inline-flex bg-gradient-to-r from-red-600 via-amber-600 to-red-500 p-3 rounded-2xl text-white mb-3 shadow-md shadow-red-500/20">
               <Gamepad2 className="h-7 w-7" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-              Welcome to NA-DY TOPUP
+              {isRegisterMode ? 'Create Account' : 'Welcome to NA-DY TOPUP'}
             </h2>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1.5 max-w-xs mx-auto">
-              Sign in with your Google account to access your recharge orders and top-up dashboard.
+            <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-xs mx-auto">
+              {isRegisterMode
+                ? 'Register to manage top-up orders and save your gaming IDs'
+                : 'Sign in with Google or Email to access your recharge orders and top-up dashboard'}
             </p>
+          </div>
+
+          {/* Tab Switcher */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-5">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('google'); setError(''); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'google'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Google 1-Click
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('email'); setError(''); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                activeTab === 'email'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              Email & Password
+            </button>
           </div>
 
           {/* Alerts display */}
@@ -287,48 +446,119 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Google Sign In Primary Action */}
-          <div className="space-y-3">
-            <button
-              type="button"
-              id="google-custom-btn"
-              onClick={handleCustomGoogleClick}
-              disabled={googleLoading}
-              className="w-full flex items-center justify-center space-x-3 py-3.5 px-5 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-cyan-400 rounded-2xl text-slate-800 font-black text-sm sm:text-base transition-all shadow-md hover:shadow-cyan-500/10 active:scale-[0.99] disabled:opacity-50 min-h-[50px] cursor-pointer"
-            >
-              {googleLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 text-cyan-600 animate-spin" />
-                  <span>Signing in with Google...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Continue with Google</span>
-                </>
-              )}
-            </button>
+          {/* Google Sign In Tab */}
+          {activeTab === 'google' && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                id="google-custom-btn"
+                onClick={handleCustomGoogleClick}
+                disabled={googleLoading}
+                className="w-full flex items-center justify-center space-x-3 py-3.5 px-5 bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-red-500 rounded-2xl text-slate-800 font-black text-sm sm:text-base transition-all shadow-md hover:shadow-red-500/10 active:scale-[0.99] disabled:opacity-50 min-h-[50px] cursor-pointer"
+              >
+                {googleLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 text-red-600 animate-spin" />
+                    <span>Signing in with Google...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>Continue with Google</span>
+                  </>
+                )}
+              </button>
 
-            {/* Official GSI Button Container (Alternative 1-tap option) */}
-            <div id="google-btn-native" className="flex justify-center my-1"></div>
-          </div>
+              <div id="google-btn-native" className="flex justify-center my-1"></div>
+            </div>
+          )}
+
+          {/* Email / Password Sign In Tab */}
+          {activeTab === 'email' && (
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-red-500/30 focus:border-red-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-red-500/30 focus:border-red-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-black text-sm rounded-xl transition-all shadow-md shadow-red-500/20 active:scale-[0.99] disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : isRegisterMode ? (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    <span>Create Account</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </>
+                )}
+              </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setIsRegisterMode(!isRegisterMode); setError(''); }}
+                  className="text-xs font-bold text-slate-600 hover:text-red-600 transition-colors"
+                >
+                  {isRegisterMode
+                    ? 'Already have an account? Sign In'
+                    : "Don't have an account yet? Create one"}
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Support Link */}
           <div className="mt-6 text-center text-xs text-slate-400">
@@ -337,7 +567,7 @@ export default function LoginPage() {
               href="https://t.me/darazzdev"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-600 font-bold hover:underline"
+              className="text-red-600 font-bold hover:underline"
             >
               Contact Telegram Support
             </a>

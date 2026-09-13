@@ -6,6 +6,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import GameIcon from '../components/GameIcon';
 import { fetchProducts, GameProduct, API_BASE } from '../lib/api';
+import { subscribeToProductsRealtime } from '../lib/supabase';
 import { AlertCircle, Gamepad2, Search, X, Sparkles, ChevronRight, ChevronLeft, Flame } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
@@ -38,16 +39,30 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchProducts()
-      .then((data) => {
-        setProducts(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Fetch products error:', err);
-        setError(`Could not connect to the top-up server API at "${API_BASE}". Details: ${err.message || err}`);
-        setLoading(false);
-      });
+    const loadProducts = () => {
+      fetchProducts()
+        .then((data) => {
+          setProducts(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error('Fetch products error:', err);
+          setError(`Could not connect to the top-up server API at "${API_BASE}". Details: ${err.message || err}`);
+          setLoading(false);
+        });
+    };
+
+    loadProducts();
+
+    // Live Supabase Realtime WebSocket listener for instant product catalog synchronization
+    const unsubscribe = subscribeToProductsRealtime(() => {
+      console.log('[Supabase Realtime] Product catalog updated, refreshing live list...');
+      loadProducts();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -291,38 +306,6 @@ export default function Home() {
                 slugMatch: 'free-fire',
                 tags: ['Diamonds', 'Network Provider'],
                 subtext: 'Free Fire Diamonds Instant',
-                isHot: false,
-                isBlue: false,
-              },
-              {
-                title: 'Age of Empire Mobile',
-                slugMatch: 'age-of-empire',
-                tags: ['TopUp', 'Network Provider'],
-                subtext: '',
-                isHot: false,
-                isBlue: false,
-              },
-              {
-                title: 'Bullet Echo',
-                slugMatch: 'bullet-echo',
-                tags: ['TopUp', 'Network Provider'],
-                subtext: '',
-                isHot: false,
-                isBlue: false,
-              },
-              {
-                title: 'Crystal of Atlan',
-                slugMatch: 'atlan',
-                tags: ['TopUp', 'Network Provider'],
-                subtext: '',
-                isHot: false,
-                isBlue: false,
-              },
-              {
-                title: 'Call of Duty Mobile Garena SGMY',
-                slugMatch: 'call-of-duty',
-                tags: ['CP', 'Network Provider'],
-                subtext: '',
                 isHot: false,
                 isBlue: false,
               },
