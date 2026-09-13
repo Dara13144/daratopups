@@ -325,10 +325,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
           </div>
         </div>
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-          {/* Column 1 & 2: Steps Form */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+        {/* Main Form Steps Container */}
+        <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
             
             {/* STEP 1: Enter Player ID & Live Profile Verification */}
             <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-xl rounded-2xl sm:rounded-3xl relative overflow-hidden">
@@ -708,69 +706,6 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
             </div>
 
           </div>
-
-          {/* Column 3: Desktop Summary Sidebar (Matching Exact User UI Design) */}
-          <div className="hidden lg:block space-y-6">
-            <div className="glass-panel p-6 bg-slate-900/90 border border-slate-800 shadow-2xl sticky top-24 rounded-3xl">
-              <h3 className="text-white font-extrabold text-base border-b border-slate-800 pb-3 mb-4 flex items-center space-x-2">
-                <ShoppingCart className="h-5 w-5 text-cyan-400" />
-                <span>សេចក្ដីសង្ខេបនៃការបញ្ជាទិញ</span>
-              </h3>
-
-              {/* Order Items list details */}
-              <div className="space-y-3.5 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-medium">ផលិតផលដែលបានជ្រើសរើស:</span>
-                  <span className="text-white font-bold">{product.name}</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-medium">កញ្ចប់ផលិតផល:</span>
-                  <span className="text-white font-bold">{selectedPackage ? selectedPackage.name : 'Not selected'}</span>
-                </div>
-
-                {playerId && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400 font-medium">Player ID:</span>
-                    <span className="text-cyan-400 font-mono font-bold">
-                      {playerId} {playerZoneId ? `(${playerZoneId})` : ''}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400 font-medium">ច្រកបង់ប្រាក់:</span>
-                  <span className="text-white font-bold uppercase">{paymentMethod === 'BAKONG' ? 'BAKONG' : paymentMethod}</span>
-                </div>
-
-                <div className="border-t border-slate-800 pt-4 flex justify-between items-end">
-                  <span className="text-slate-200 text-sm font-bold">តម្លៃសរុប (USD):</span>
-                  <span className="text-[#00c988] text-2xl font-black">
-                    ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Global Error Banner */}
-              {error && (
-                <div className="mt-4 p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-red-300 text-xs leading-relaxed">
-                  {error}
-                </div>
-              )}
-
-              {/* Action Submit Checkout */}
-              <button
-                type="button"
-                onClick={handleOrderSubmit}
-                disabled={orderSubmitting}
-                className="w-full mt-6 py-3.5 rounded-2xl bg-[#00c988] hover:bg-[#00b077] text-slate-950 font-black text-sm uppercase shadow-xl shadow-[#00c988]/30 transition-all duration-300 glow-btn disabled:opacity-50 min-h-[48px] flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98"
-              >
-                <span>{orderSubmitting ? 'ដំណើរការ...' : 'បញ្ជាទិញ (TOP UP NOW)'}</span>
-                <span className="text-base font-bold">›</span>
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* ══ STICKY FLOATING QUICK-CHECKOUT BAR (Matching User Design) ═════════════════════════ */}
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#060913]/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.7)] px-4 sm:px-8 py-2.5 sm:py-3 select-none">

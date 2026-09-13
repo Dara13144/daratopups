@@ -345,10 +345,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       <Header />
       
       <main className="flex-grow max-w-4xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-4 sm:py-10 pb-24 md:pb-12 overflow-x-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 sm:gap-8">
+        <div className="max-w-md mx-auto space-y-4 sm:space-y-6">
           
-          {/* Column 1: Payment Portal (QR scan or Card info) */}
-          <div className="md:col-span-3 space-y-4 sm:space-y-6">
+          {/* Payment Portal (QR scan or Card info) */}
+          <div className="space-y-4 sm:space-y-6">
             
             {order.status === 'PENDING' && (
               <div className="glass-panel p-3.5 sm:p-6 bg-slate-900/90 border-slate-800 shadow-xl text-center rounded-2xl sm:rounded-3xl">
@@ -582,79 +582,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
               </div>
             )}
 
-          </div>
-
-          {/* Column 2: Order Invoice Details Sidebar */}
-          <div className="md:col-span-2 space-y-4 sm:space-y-6">
-            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-xl space-y-4 sm:space-y-6 rounded-2xl sm:rounded-3xl">
-              <div>
-                <h4 className="text-white font-extrabold text-sm border-b border-slate-800 pb-2 mb-2.5">{t.orderInvoice}</h4>
-                <div className="flex items-center space-x-1.5 text-xs text-slate-400">
-                  <Clock className="h-4 w-4 text-cyan-400 shrink-0" />
-                  <span>{t.statusLabel}: </span>
-                  <span className={`font-bold select-none capitalize ${
-                    (order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') ? 'text-emerald-400' : order.status === 'PENDING' ? 'text-amber-400' : 'text-red-400'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-              </div>
-
-              {/* Invoice details fields */}
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-                  <span className="text-slate-400">{t.invoiceReference}:</span>
-                  <div className="flex items-center space-x-1">
-                    <code className="text-slate-300 font-mono text-[11px] truncate max-w-[130px]" title={order.paymentTxnId}>
-                      {order.paymentTxnId}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(order.paymentTxnId)}
-                      className="p-1 rounded text-slate-400 hover:text-slate-200"
-                      title="Copy transaction ID"
-                    >
-                      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">{t.selectedProduct}:</span>
-                  <span className="text-white font-bold text-right truncate max-w-[160px]">{order.gameName}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">{t.packageItem}:</span>
-                  <span className="text-white font-bold text-right truncate max-w-[160px]">{order.packageName}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">{t.playerId}:</span>
-                  <span className="text-white font-mono font-semibold text-right">{order.playerId}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">{t.paymentGateway}:</span>
-                  <span className="text-white font-bold text-right">{order.paymentMethod}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-400">{t.paymentStatusLabel}:</span>
-                  <span className={`font-bold text-right uppercase ${
-                    order.paymentStatus === 'PAID' || order.paymentStatus === 'SUCCESS' ? 'text-emerald-400' : order.paymentStatus === 'PENDING' || order.paymentStatus === 'UNPAID' ? 'text-amber-400' : 'text-red-400'
-                  }`}>
-                    {order.paymentStatus}
-                  </span>
-                </div>
-
-                <div className="border-t border-slate-800 pt-3 flex justify-between items-end">
-                  <span className="text-slate-300 font-semibold">{t.totalPrice}:</span>
-                  <span className="text-cyan-400 text-lg font-black">
-                    ${order.price.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
 
         </div>
