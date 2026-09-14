@@ -24,13 +24,17 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'daratopup-backend-1.onrender.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'nadybackend.onrender.com',
+      },
     ],
     unoptimized: true,
   },
 
   // Safety net: bake the production API URL in at build time even if env var is missing
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://nadybackend.onrender.com',
   },
 
   // Fix turbopack root warning — point to the frontend directory

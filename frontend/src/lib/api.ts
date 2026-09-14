@@ -1,4 +1,4 @@
-const PRODUCTION_API = 'http://localhost:5001';
+const PRODUCTION_API = 'https://nadybackend.onrender.com';
 
 // Retrieve the raw backend URL from env, default fallback to http://localhost:5001
 const rawApiUrl = (
