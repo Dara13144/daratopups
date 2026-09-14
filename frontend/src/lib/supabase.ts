@@ -219,6 +219,102 @@ export function subscribeToProductsRealtime(onProductChange: (payload: any) => v
 }
 
 /**
+ * Directly deletes a game and its associated packages from Supabase
+ * Performs verification to guarantee the game no longer exists in Supabase.
+ */
+export async function deleteGameFromSupabase(id: string): Promise<boolean> {
+  if (!id) {
+    console.error('[Supabase] Missing game ID for delete');
+    return false;
+  }
+
+  console.log('[Supabase] Deleting game from database with ID:', id);
+  const client = getSupabaseClient();
+
+  try {
+    // 1. Delete associated packages first to be safe
+    await client.from('Package').delete().eq('productId', id);
+
+    // 2. Delete the product record using real primary key
+    const { error } = await client.from('Product').delete().eq('id', id);
+
+    if (error) {
+      console.error('[Supabase] Failed to delete game:', error);
+      throw error;
+    }
+
+    // 3. Post-delete verification: confirm record no longer exists in Supabase
+    const { data: deletedCheck, error: checkError } = await client
+      .from('Product')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (checkError) {
+      console.warn('[Supabase] Delete verification query warning:', checkError);
+    }
+
+    if (deletedCheck) {
+      console.error('[Supabase] GAME WAS NOT ACTUALLY DELETED FROM SUPABASE:', deletedCheck);
+      throw new Error(`Game with ID "${id}" was not deleted from Supabase`);
+    }
+
+    console.log('[Supabase] Game verified deleted from Supabase:', id);
+    return true;
+  } catch (err: any) {
+    console.error('[Supabase] Delete game error:', err);
+    throw err;
+  }
+}
+
+/**
+ * Direct fetch of all games and packages from Supabase (Single Source of Truth)
+ */
+export async function fetchGamesFromSupabase(): Promise<any[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('Product')
+    .select('*, packages:Package(*)')
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('[Supabase] Failed to load games from Supabase:', error);
+    throw error;
+  }
+
+  return (data || []).map((p: any) => ({
+    ...p,
+    packages: (p.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+  }));
+}
+
+/**
+ * Directly deletes a package from Supabase
+ */
+export async function deletePackageFromSupabase(id: string): Promise<boolean> {
+  if (!id) {
+    console.error('[Supabase] Missing package ID for delete');
+    return false;
+  }
+
+  console.log('[Supabase] Deleting package from database with ID:', id);
+  const client = getSupabaseClient();
+
+  try {
+    const { error } = await client.from('Package').delete().eq('id', id);
+    if (error) {
+      console.error('[Supabase] Failed to delete package:', error);
+      throw error;
+    }
+    console.log('[Supabase] Package deleted successfully from Supabase:', id);
+    return true;
+  } catch (err: any) {
+    console.error('[Supabase] Delete package error:', err);
+    throw err;
+  }
+}
+
+/**
  * Upload image to Supabase Storage bucket
  */
 export async function uploadToSupabaseStorage(
@@ -243,3 +339,194 @@ export async function uploadToSupabaseStorage(
 
   return publicUrlData.publicUrl;
 }
+
+/**
+ * Submit Contact Message directly to Supabase ContactMessage table
+ */
+export async function submitContactMessageSupabase(messageData: {
+  name: string;
+  email: string;
+  phone?: string;
+  telegram?: string;
+  subject: string;
+  message: string;
+  txnId?: string;
+}) {
+  const client = getSupabaseClient();
+  const id = 'cm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const { data, error } = await client
+    .from('ContactMessage')
+    .insert([{
+      id,
+      name: messageData.name.trim(),
+      email: messageData.email.trim().toLowerCase(),
+      phone: messageData.phone?.trim() || null,
+      telegram: messageData.telegram?.trim() || null,
+      subject: messageData.subject.trim(),
+      message: messageData.message.trim(),
+      txnId: messageData.txnId?.trim() || null,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Real-time subscription to Contact Messages for Admin Dashboard
+ */
+export function subscribeToContactMessagesRealtime(onMessage: (payload: any) => void) {
+  if (typeof window === 'undefined') return () => {};
+  try {
+    const client = getSupabaseClient();
+    const uniqueChannelName = `contact-msg-rt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    const channel = client
+      .channel(uniqueChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ContactMessage',
+        },
+        (payload) => {
+          if (payload) {
+            onMessage(payload);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Supabase Realtime] Subscribed to ContactMessage channel');
+        }
+      });
+
+    return () => {
+      try {
+        client.removeChannel(channel);
+      } catch (e) {
+        console.warn('[Supabase Realtime] Contact channel unsubscribe warning:', e);
+      }
+    };
+  } catch (err) {
+    console.warn('[Supabase Realtime] Failed to initialize contact realtime channel:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Real-time listener for Package updates or live catalog sync (INSERT, UPDATE, DELETE)
+ */
+export function subscribeToPackagesRealtime(onPackageChange: (payload: any) => void) {
+  if (typeof window === 'undefined') return () => {};
+  try {
+    const client = getSupabaseClient();
+    const uniqueChannelName = `packages-rt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    const channel = client
+      .channel(uniqueChannelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'Package',
+        },
+        (payload) => {
+          if (payload) {
+            onPackageChange(payload);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Supabase Realtime] Subscribed to packages channel');
+        }
+      });
+
+    return () => {
+      try {
+        client.removeChannel(channel);
+      } catch (e) {
+        console.warn('[Supabase Realtime] Packages channel unsubscribe warning:', e);
+      }
+    };
+  } catch (err) {
+    console.warn('[Supabase Realtime] Failed to initialize packages realtime channel:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Universal real-time subscription for all tables (Product, Package, Order, ContactMessage)
+ * Handles live INSERT, UPDATE, and DELETE across the whole site!
+ */
+export function subscribeToAllRealtime(callbacks: {
+  onProductChange?: (payload: any) => void;
+  onPackageChange?: (payload: any) => void;
+  onOrderChange?: (payload: any) => void;
+  onContactChange?: (payload: any) => void;
+}) {
+  if (typeof window === 'undefined') return () => {};
+  try {
+    const client = getSupabaseClient();
+    const uniqueChannelName = `global-sync-rt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    
+    let channel = client.channel(uniqueChannelName);
+
+    if (callbacks.onProductChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'Product' },
+        (payload) => callbacks.onProductChange!(payload)
+      );
+    }
+
+    if (callbacks.onPackageChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'Package' },
+        (payload) => callbacks.onPackageChange!(payload)
+      );
+    }
+
+    if (callbacks.onOrderChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'Order' },
+        (payload) => callbacks.onOrderChange!(payload)
+      );
+    }
+
+    if (callbacks.onContactChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ContactMessage' },
+        (payload) => callbacks.onContactChange!(payload)
+      );
+    }
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[Supabase Realtime] Connected to Global Realtime Sync Channel (DELETE / INSERT / UPDATE)');
+      }
+    });
+
+    return () => {
+      try {
+        client.removeChannel(channel);
+      } catch (e) {
+        console.warn('[Supabase Realtime] Global channel unsubscribe warning:', e);
+      }
+    };
+  } catch (err) {
+    console.warn('[Supabase Realtime] Failed to initialize global realtime channel:', err);
+    return () => {};
+  }
+}
+

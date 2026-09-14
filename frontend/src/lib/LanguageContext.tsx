@@ -191,7 +191,7 @@ const translations: Record<Language, Translations> = {
     validated: 'បានបញ្ជាក់',
     nicknameRequired: 'សូមបញ្ចូលលេខសម្គាល់អ្នកលេង',
     zoneIdRequired: 'សូមបញ្ចូលលេខសម្គាល់តំបន់សម្រាប់ MLBB',
-    selectRechargePackage: 'ជ្រើសរើសកញ្ចប់បញ្ចូលលុយ',
+    selectRechargePackage: 'ជ្រើសរើសកញ្ចប់',
     selectedBadge: 'បានជ្រើសរើស',
     choosePaymentGateway: 'ជ្រើសរើសច្រកបង់ប្រាក់',
     bakongDesc: 'ផ្ទៀងផ្ទាត់ការស្កែនដោយស្វ័យប្រវត្តជាលុយរៀល/ដុល្លារ',

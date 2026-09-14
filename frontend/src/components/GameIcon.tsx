@@ -60,12 +60,33 @@ export default function GameIcon({ slug, name, image, className = 'w-full h-full
 
   // Build ordered candidate list
   const candidates: string[] = [];
-  if (specificLocal) candidates.push(specificLocal);
-  candidates.push(`/images/games/${normalizedSlug}.png`);
-  candidates.push(`/images/games/${normalizedSlug}.jpg`);
+
+  // 1. HIGHEST PRIORITY: Uploaded or explicitly configured game image (Supabase Storage / Server / External URL)
+  if (image && typeof image === 'string' && image.trim()) {
+    let cleanImg = image.trim();
+    if (cleanImg.startsWith('/uploads')) {
+      const serverBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001').replace(/\/$/, '').replace(/\/api$/, '');
+      cleanImg = `${serverBase}${cleanImg}`;
+    }
+    candidates.push(cleanImg);
+  }
+
+  // 2. Known specific local high-res artwork
+  if (specificLocal && !candidates.includes(specificLocal)) {
+    candidates.push(specificLocal);
+  }
+
+  // 3. Local slug images
+  const localPng = `/images/games/${normalizedSlug}.png`;
+  const localJpg = `/images/games/${normalizedSlug}.jpg`;
+  if (!candidates.includes(localPng)) candidates.push(localPng);
+  if (!candidates.includes(localJpg)) candidates.push(localJpg);
+
+  // 4. Remote CDN artwork fallback
   const cdnArt = getGameArtwork(slug, image);
-  if (cdnArt && !candidates.includes(cdnArt)) candidates.push(cdnArt);
-  if (image && !candidates.includes(image)) candidates.push(image);
+  if (cdnArt && !candidates.includes(cdnArt)) {
+    candidates.push(cdnArt);
+  }
 
   const currentSrc = candidates[candidateIdx];
 

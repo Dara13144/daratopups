@@ -6,56 +6,95 @@ import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import GameIcon from '../../../components/GameIcon';
 import { fetchProduct, createOrder, lookupNickname, lookupPlayerProfile, PlayerProfile, GameProduct, GamePackage, API_BASE } from '../../../lib/api';
+import { subscribeToAllRealtime } from '../../../lib/supabase';
 import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles, UserCheck, Send, Search, RefreshCw, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
-// --- PREMIUM SVG GRAPHICS FOR RECHARGE PACKAGES ---
-const DiamondPileIcon = () => (
-  <div className="h-8 w-9 sm:h-10 sm:w-11 relative flex items-center justify-center shrink-0 rounded-lg overflow-hidden border border-cyan-400/40 shadow-xs bg-slate-900">
-    <img
-      src="/images/diamond-art.png"
-      alt="Diamonds"
-      className="h-full w-full object-cover rounded hover:scale-110 transition-transform"
-    />
-  </div>
-);
-
-const EvoCardIcon = ({ days }: { days: string }) => (
-  <div className="relative flex items-center justify-center shrink-0">
-    <svg className="h-8 w-10 sm:h-9 sm:w-12 text-rose-500" viewBox="0 0 56 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="52" height="32" rx="6" fill="url(#cardGrad)" stroke="#f43f5e" strokeWidth="1.5"/>
-      <path d="M8 8H24V14H8V8Z" fill="#fda4af" opacity="0.3"/>
-      <path d="M8 20H48V22H8V20Z" fill="#f43f5e" opacity="0.5"/>
+// --- PREMIUM SVG GRAPHICS FOR RECHARGE PACKAGES (MATCHING USER SCREENSHOTS) ---
+const PinkDiamondIcon = () => (
+  <div className="h-7 w-8 sm:h-8 sm:w-9 relative flex items-center justify-center shrink-0">
+    <svg viewBox="0 0 40 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full drop-shadow-xs">
+      <path d="M12 2L4 12L20 30L36 12L28 2H12Z" fill="url(#pinkGemGrad)" />
+      <path d="M12 2L20 12L28 2H12Z" fill="#F472B6" opacity="0.95" />
+      <path d="M4 12H36L20 30L4 12Z" fill="url(#pinkGemBottom)" opacity="0.9" />
+      <path d="M12 2L4 12H13L20 12L12 2Z" fill="#FBCFE8" opacity="0.95" />
+      <path d="M28 2L36 12H27L20 12L28 2Z" fill="#EC4899" opacity="0.95" />
+      <path d="M13 12L20 30L20 12H13Z" fill="#BE185D" opacity="0.98" />
+      <path d="M27 12L20 30L20 12H27Z" fill="#9D174D" opacity="0.98" />
+      <path d="M4 12L20 30L13 12H4Z" fill="#E11D48" opacity="0.85" />
+      <path d="M36 12L20 30L27 12H36Z" fill="#881337" opacity="0.9" />
+      <circle cx="15" cy="8" r="1.5" fill="#FFFFFF" opacity="0.85" />
+      <circle cx="25" cy="8" r="1" fill="#FFFFFF" opacity="0.75" />
       <defs>
-        <linearGradient id="cardGrad" x1="28" y1="2" x2="28" y2="34" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#e11d48"/>
-          <stop stopColor="#4c0519"/>
+        <linearGradient id="pinkGemGrad" x1="20" y1="2" x2="20" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#F472B6" />
+          <stop stopColor="#9D174D" />
+        </linearGradient>
+        <linearGradient id="pinkGemBottom" x1="20" y1="12" x2="20" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#DB2777" />
+          <stop stopColor="#831843" />
         </linearGradient>
       </defs>
     </svg>
-    <span className="absolute text-[7px] font-black text-rose-100 tracking-wider font-sans select-none">{days}</span>
   </div>
 );
 
-const PassChestIcon = ({ type }: { type: string }) => (
-  <div className="relative flex items-center justify-center shrink-0">
-    <svg className="h-8 w-10 sm:h-9 sm:w-11 text-amber-500" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6 14H42V32H6V14Z" fill="url(#chestGrad)" stroke="#f59e0b" strokeWidth="1.5"/>
-      <path d="M4 14C4 10 8 8 24 8C40 8 44 10 44 14H4Z" fill="url(#lidGrad)" stroke="#f59e0b" strokeWidth="1.5"/>
-      <circle cx="24" cy="18" r="3" fill="#fef08a" stroke="#d97706" strokeWidth="1"/>
+const WeeklyPassIcon = () => (
+  <div className="h-6 w-9 sm:h-7 sm:w-10 relative flex items-center justify-center shrink-0">
+    <svg viewBox="0 0 46 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full rounded shadow-xs overflow-hidden">
+      <rect x="0.5" y="0.5" width="45" height="29" rx="3" fill="url(#weeklyGrad)" stroke="#C084FC" strokeWidth="1" />
+      <rect x="13" y="4.5" width="20" height="12" rx="2" fill="#7C3AED" stroke="#E9D5FF" strokeWidth="0.8" />
+      <text x="23" y="13.5" fill="#FFFFFF" fontSize="8" fontWeight="900" textAnchor="middle" fontFamily="system-ui, -apple-system, sans-serif">2X</text>
+      <path d="M4 22H42" stroke="#E9D5FF" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="2 2" />
+      <circle cx="7" cy="8" r="2" fill="#F472B6" opacity="0.85" />
+      <circle cx="39" cy="8" r="2" fill="#A855F7" opacity="0.85" />
       <defs>
-        <linearGradient id="chestGrad" x1="24" y1="14" x2="24" y2="32" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#b45309"/>
-          <stop stopColor="#f59e0b" stopOpacity="0.8"/>
-        </linearGradient>
-        <linearGradient id="lidGrad" x1="24" y1="8" x2="24" y2="14" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#f59e0b"/>
-          <stop stopColor="#78350f"/>
+        <linearGradient id="weeklyGrad" x1="0" y1="0" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#6B21A8" />
+          <stop stopColor="#3B0764" />
         </linearGradient>
       </defs>
     </svg>
-    <span className="absolute -bottom-1 right-0 text-[6px] font-extrabold bg-slate-950 border border-slate-900 text-amber-400 px-1 py-0.2 rounded-md scale-90">{type}</span>
+  </div>
+);
+
+const WeeklyLitePassIcon = () => (
+  <div className="h-6 w-9 sm:h-7 sm:w-10 relative flex items-center justify-center shrink-0">
+    <svg viewBox="0 0 46 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full rounded shadow-xs overflow-hidden">
+      <rect x="0.5" y="0.5" width="45" height="29" rx="3" fill="url(#weeklyLiteGrad)" stroke="#38BDF8" strokeWidth="1" />
+      <rect x="13" y="4.5" width="20" height="12" rx="2" fill="#0284C7" stroke="#BAE6FD" strokeWidth="0.8" />
+      <text x="23" y="13.5" fill="#FFFFFF" fontSize="8" fontWeight="900" textAnchor="middle" fontFamily="system-ui, -apple-system, sans-serif">2X</text>
+      <path d="M4 22H42" stroke="#BAE6FD" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="2 2" />
+      <circle cx="7" cy="8" r="2" fill="#38BDF8" opacity="0.85" />
+      <circle cx="39" cy="8" r="2" fill="#0EA5E9" opacity="0.85" />
+      <defs>
+        <linearGradient id="weeklyLiteGrad" x1="0" y1="0" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#0369A1" />
+          <stop stopColor="#082F49" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+);
+
+const MonthlyPassIcon = () => (
+  <div className="h-6 w-9 sm:h-7 sm:w-10 relative flex items-center justify-center shrink-0">
+    <svg viewBox="0 0 46 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full rounded shadow-xs overflow-hidden">
+      <rect x="0.5" y="0.5" width="45" height="29" rx="3" fill="url(#monthlyGrad)" stroke="#F59E0B" strokeWidth="1" />
+      <rect x="13" y="4.5" width="20" height="12" rx="2" fill="#D97706" stroke="#FEF3C7" strokeWidth="0.8" />
+      <path d="M23 7L24.5 10H21.5L23 7Z" fill="#FEF08A" />
+      <text x="23" y="14.5" fill="#FFFFFF" fontSize="6.5" fontWeight="900" textAnchor="middle" fontFamily="system-ui, -apple-system, sans-serif">VIP</text>
+      <path d="M4 22H42" stroke="#FEF3C7" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="2 2" />
+      <circle cx="7" cy="8" r="2" fill="#FBBF24" opacity="0.85" />
+      <circle cx="39" cy="8" r="2" fill="#F59E0B" opacity="0.85" />
+      <defs>
+        <linearGradient id="monthlyGrad" x1="0" y1="0" x2="46" y2="30" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#B45309" />
+          <stop stopColor="#78350F" />
+        </linearGradient>
+      </defs>
+    </svg>
   </div>
 );
 
@@ -65,25 +104,63 @@ const getPackageIcon = (pkgOrName: GamePackage | string) => {
       ? pkgOrName.image
       : `${API_BASE}${pkgOrName.image}`;
     return (
-      <div className="h-8 w-9 sm:h-10 sm:w-11 relative flex items-center justify-center shrink-0 rounded-lg overflow-hidden border border-cyan-400/40 shadow-xs bg-slate-900">
+      <div className="h-7 w-8 sm:h-8 sm:w-9 relative flex items-center justify-center shrink-0 rounded-lg overflow-hidden">
         <img
           src={imgSrc}
           alt={pkgOrName.name}
-          className="h-full w-full object-contain p-0.5 rounded hover:scale-110 transition-transform"
+          className="h-full w-full object-contain"
         />
       </div>
     );
   }
   const name = typeof pkgOrName === 'string' ? pkgOrName : (pkgOrName?.name || '');
   const norm = name.toLowerCase();
-  if (norm.includes('evo3d') || norm.includes('3d') || norm.includes('3 day')) return <EvoCardIcon days="3 DAY" />;
-  if (norm.includes('evo7d') || norm.includes('7d') || norm.includes('7 day')) return <EvoCardIcon days="7 DAY" />;
-  if (norm.includes('evo30d') || norm.includes('30d') || norm.includes('30 day')) return <EvoCardIcon days="30 DAY" />;
-  if (norm.includes('weeklylite') || norm.includes('weekly-lite')) return <PassChestIcon type="LITE" />;
-  if (norm.includes('weekly')) return <PassChestIcon type="WEEK" />;
-  if (norm.includes('monthly')) return <PassChestIcon type="MONTH" />;
-  if (norm.includes('pass')) return <PassChestIcon type="PASS" />;
-  return <DiamondPileIcon />;
+  if (norm.includes('lite')) return <WeeklyLitePassIcon />;
+  if (norm.includes('monthly') || norm.includes('ប្រចាំខែ')) return <MonthlyPassIcon />;
+  if (norm.includes('weekly') || norm.includes('សប្តាហ៍')) return <WeeklyPassIcon />;
+  return <PinkDiamondIcon />;
+};
+
+const groupPackagesByCategory = (packages: GamePackage[]) => {
+  const groups: { [key: string]: GamePackage[] } = {};
+  const orderPriority = ['ពេជ្រ', 'ប្រចាំសប្តាហ៍', 'ប្រចាំសប្តាហ៍ (Lite)', 'ប្រចាំខែ'];
+
+  for (const pkg of packages) {
+    let cat = pkg.category || 'ពេជ្រ';
+    const norm = (pkg.name || '').toLowerCase();
+
+    if (cat === 'DIAMOND' || norm.includes('diamond') || /^\d+$/.test(pkg.name.trim())) {
+      cat = 'ពេជ្រ';
+    } else if (norm.includes('lite')) {
+      cat = 'ប្រចាំសប្តាហ៍ (Lite)';
+    } else if (norm.includes('weekly') || cat === 'WEEKLY' || norm.includes('សប្តាហ៍')) {
+      cat = 'ប្រចាំសប្តាហ៍';
+    } else if (norm.includes('monthly') || cat === 'MONTHLY' || norm.includes('ប្រចាំខែ')) {
+      cat = 'ប្រចាំខែ';
+    } else if (cat === 'NORMAL' || cat === 'BEST_SELLER') {
+      if (norm.includes('pass') || norm.includes('membership')) {
+        cat = 'ប្រចាំសប្តាហ៍';
+      } else {
+        cat = 'ពេជ្រ';
+      }
+    }
+
+    if (!groups[cat]) {
+      groups[cat] = [];
+    }
+    groups[cat].push(pkg);
+  }
+
+  const sortedCategories = Object.keys(groups).sort((a, b) => {
+    const idxA = orderPriority.indexOf(a);
+    const idxB = orderPriority.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  return { groups, sortedCategories };
 };
 
 export default function GameDetailsPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -92,7 +169,6 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
   const [product, setProduct] = useState<GameProduct | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<GamePackage | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'ABA' | 'BAKONG' | 'CANADIA'>('BAKONG');
-  const [packageCategoryFilter, setPackageCategoryFilter] = useState<'ALL' | 'DIAMONDS' | 'PASSES' | 'SPECIALS'>('ALL');
   const { t } = useLanguage();
   
   // Player credentials inputs & rich game profile
@@ -119,20 +195,44 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     setLoading(true);
     setError('');
 
-    fetchProduct(slug)
-      .then((data) => {
-        setProduct(data);
-        if (data.packages && data.packages.length > 0) {
-          setSelectedPackage(data.packages[0]);
+    const loadGame = () => {
+      fetchProduct(slug)
+        .then((data) => {
+          setProduct(data);
+          if (data.packages && data.packages.length > 0) {
+            setSelectedPackage((prev) => prev ? (data.packages.find((p: any) => p.id === prev.id) || data.packages[0]) : data.packages[0]);
+          }
+          setLoading(false);
+        })
+        .catch((err) => {
+          setProduct(null);
+          setError(err.message || 'Product not found or has been removed');
+          setLoading(false);
+        });
+    };
+
+    loadGame();
+
+    const unsub = subscribeToAllRealtime({
+      onProductChange: (payload) => {
+        if (payload.eventType === 'DELETE') {
+          if (payload.old?.slug === slug || payload.old?.id === product?.id) {
+            setProduct(null);
+            setError('This game was removed from the catalog.');
+          }
+        } else {
+          loadGame();
         }
-        setLoading(false);
-      })
-      .catch((err) => {
-        setProduct(null);
-        setError(err.message || 'Product not found or has been removed');
-        setLoading(false);
-      });
-  }, [slug]);
+      },
+      onPackageChange: () => {
+        loadGame();
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [slug, product?.id]);
 
   // Dedicated Check Name Action
   const handlePerformCheckName = async () => {
@@ -299,7 +399,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     <>
       <Header />
       
-      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-32 lg:pb-12 overflow-x-hidden">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-12 overflow-x-hidden">
         {/* Back Link */}
         <Link 
           href="/" 
@@ -495,134 +595,85 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               )}
             </div>
 
-            {/* STEP 2: Select Package */}
-            <div className="glass-panel p-4 sm:p-6 bg-slate-900/90 border-slate-800 shadow-md rounded-2xl sm:rounded-3xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
-                <div className="flex items-center space-x-2">
-                  <span className="h-6 w-6 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-xs shrink-0">
-                    2
-                  </span>
-                  <h3 className="text-white font-extrabold text-sm sm:text-base">{t.selectRechargePackage}</h3>
-                </div>
-
-                {/* Package Category Filter Tabs (Working on phone & computer) */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => setPackageCategoryFilter('ALL')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                      packageCategoryFilter === 'ALL'
-                        ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    All Packages
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPackageCategoryFilter('DIAMONDS')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                      packageCategoryFilter === 'DIAMONDS'
-                        ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    💎 Diamonds
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPackageCategoryFilter('PASSES')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                      packageCategoryFilter === 'PASSES'
-                        ? 'bg-amber-500 text-slate-950 shadow-md font-black'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    🔥 Passes / VIP
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPackageCategoryFilter('SPECIALS')}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                      packageCategoryFilter === 'SPECIALS'
-                        ? 'bg-violet-500 text-white shadow-md font-black'
-                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    ⚡ Specials
-                  </button>
-                </div>
+            {/* STEP 2: Select Package (Matching User Design: Images 1 & 2) */}
+            <div className="p-4 sm:p-6 bg-[#FFF5F8] border border-pink-100/90 shadow-sm rounded-2xl sm:rounded-3xl">
+              <div className="flex items-center space-x-2.5 mb-4 sm:mb-6">
+                <span className="h-7 w-7 rounded-lg bg-[#9D174D] flex items-center justify-center text-white font-black text-xs shrink-0 shadow-sm">
+                  2
+                </span>
+                <h3 className="text-slate-900 font-extrabold text-sm sm:text-base">
+                  {t.selectRechargePackage || 'ជ្រើសរើសកញ្ចប់'}
+                </h3>
               </div>
 
-              {/* Filtered Packages Grid */}
-              {(() => {
-                const filteredPkgs = product.packages.filter(pkg => {
-                  if (packageCategoryFilter === 'ALL') return true;
-                  const name = pkg.name.toLowerCase();
-                  if (packageCategoryFilter === 'DIAMONDS') {
-                    return !name.includes('pass') && !name.includes('weekly') && !name.includes('monthly') && !name.includes('evo');
-                  }
-                  if (packageCategoryFilter === 'PASSES') {
-                    return pkg.category === 'BEST_SELLER' || name.includes('pass') || name.includes('weekly') || name.includes('monthly') || name.includes('evo') || !!pkg.badge;
-                  }
-                  if (packageCategoryFilter === 'SPECIALS') {
-                    return !!pkg.badge || pkg.category === 'BEST_SELLER' || name.includes('special') || name.includes('lite');
-                  }
-                  return true;
-                });
+              {/* Categorized Packages Grid */}
+              {product.packages.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs">
+                  No packages available for this game.
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {(() => {
+                    const { groups, sortedCategories } = groupPackagesByCategory(product.packages);
+                    return sortedCategories.map((category) => (
+                      <div key={category}>
+                        <h4 className="text-slate-700 font-bold text-xs sm:text-sm mb-2.5 tracking-wide">
+                          {category}
+                        </h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
+                          {groups[category].map((pkg) => {
+                            const isSelected = selectedPackage?.id === pkg.id;
+                            return (
+                              <button
+                                key={pkg.id}
+                                type="button"
+                                onClick={() => setSelectedPackage(pkg)}
+                                className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-left relative transition-all flex flex-col justify-between min-h-[96px] sm:min-h-[106px] active:scale-[0.98] cursor-pointer bg-white ${
+                                  isSelected
+                                    ? 'border-2 border-[#BE185D] ring-2 ring-[#BE185D]/20 shadow-md scale-[1.01]'
+                                    : 'border border-pink-200/80 hover:border-pink-300 shadow-xs hover:shadow-sm'
+                                }`}
+                              >
+                                {pkg.badge && (
+                                  <span className="absolute top-0 right-0 z-10 text-[7.5px] sm:text-[8px] font-black bg-gradient-to-r from-red-600 to-pink-600 text-white px-2 py-0.5 rounded-bl-lg uppercase shadow-xs tracking-wide">
+                                    {pkg.badge}
+                                  </span>
+                                )}
 
-                if (filteredPkgs.length === 0) {
-                  return (
-                    <div className="text-center py-8 text-slate-500 text-xs">
-                      No packages in this filter category.
-                    </div>
-                  );
-                }
+                                {/* Top Row: Package Icon on Left, Selection Radio on Right */}
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="shrink-0">
+                                    {getPackageIcon(pkg)}
+                                  </div>
+                                  <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center transition-all ${
+                                    isSelected
+                                      ? 'border-2 border-[#BE185D] bg-white'
+                                      : 'border border-pink-200 bg-white'
+                                  }`}>
+                                    {isSelected && (
+                                      <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#BE185D]" />
+                                    )}
+                                  </div>
+                                </div>
 
-                return (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
-                    {filteredPkgs.map((pkg) => {
-                      const isSelected = selectedPackage?.id === pkg.id;
-                      return (
-                        <button
-                          key={pkg.id}
-                          type="button"
-                          onClick={() => setSelectedPackage(pkg)}
-                          className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl text-left relative overflow-hidden transition-all flex flex-col justify-between min-h-[96px] sm:min-h-[106px] active:scale-[0.98] cursor-pointer bg-white shadow-md ${
-                            isSelected
-                              ? 'border-2 border-[#00c988] ring-2 ring-[#00c988]/40 shadow-xl shadow-[#00c988]/15 scale-[1.01]'
-                              : 'border-2 border-slate-200 hover:border-[#00c988] hover:shadow-lg'
-                          }`}
-                        >
-                          {pkg.badge && (
-                            <span className="absolute top-0 right-0 z-10 text-[7.5px] sm:text-[8px] font-black bg-gradient-to-r from-red-600 to-orange-500 text-white px-2 py-0.5 rounded-bl-lg uppercase shadow-xs tracking-wide">
-                              {pkg.badge}
-                            </span>
-                          )}
-
-                          <div className="flex items-start justify-between gap-1 w-full text-left">
-                            <div className="font-extrabold text-slate-900 text-[11px] sm:text-xs line-clamp-2 leading-tight pr-1 sm:pr-4">
-                              {pkg.name}
-                            </div>
-                            <div className="shrink-0 scale-90 sm:scale-95 translate-y-0.5">
-                              {getPackageIcon(pkg)}
-                            </div>
-                          </div>
-
-                          <div className="text-[#00c988] font-black text-xs sm:text-sm mt-2 flex justify-between items-end">
-                            <span className="font-black text-sm sm:text-base">${pkg.price.toFixed(2)}</span>
-                            {isSelected && (
-                              <span className="text-[8.5px] bg-[#00c988] text-slate-950 font-black px-1.5 py-0.5 rounded-md select-none shadow-xs">
-                                {t.selectedBadge}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                                {/* Content Below: Name & Price */}
+                                <div className="mt-2.5">
+                                  <div className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1 leading-tight">
+                                    {pkg.name}
+                                  </div>
+                                  <div className="font-black text-sm sm:text-base text-[#9D174D] mt-0.5">
+                                    ${pkg.price.toFixed(2)}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
 
             {/* STEP 3: Choose Payment Gateway (Matching Exact User UI Design) */}
@@ -705,61 +756,15 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               </button>
             </div>
 
-          </div>
-
-        {/* ══ STICKY FLOATING QUICK-CHECKOUT BAR (Matching User Design) ═════════════════════════ */}
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#060913]/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.7)] px-4 sm:px-8 py-2.5 sm:py-3 select-none">
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
-            
-            {/* Left: Icon circle + Package info + Glowing Price */}
-            <div className="flex items-center space-x-3.5 min-w-0">
-              {/* Circle Avatar Icon with subtle ring */}
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center shrink-0 shadow-inner">
-                <span className="font-black text-sm text-cyan-400 select-none">N</span>
+            {/* Error banner if validation fails */}
+            {error && (
+              <div className="text-xs sm:text-sm text-red-400 font-bold bg-red-950/80 p-3 rounded-xl border border-red-800 text-center">
+                ⚠️ {error}
               </div>
+            )}
 
-              {/* Name & Glowing Price */}
-              <div className="min-w-0 flex flex-col justify-center">
-                <div className="text-[11px] sm:text-xs text-slate-200 font-extrabold uppercase tracking-wider truncate max-w-[180px] sm:max-w-xs">
-                  {selectedPackage ? selectedPackage.name : 'សូមជ្រើសរើសកញ្ចប់'}
-                </div>
-                <div className="text-base sm:text-xl font-black text-[#00c988] leading-tight">
-                  ${selectedPackage ? selectedPackage.price.toFixed(2) : '0.00'}
-                </div>
-              </div>
-            </div>
-
-            {/* Right: TOP UP NOW / បញ្ជាទិញ Button */}
-            <button
-              type="button"
-              onClick={handleOrderSubmit}
-              disabled={orderSubmitting || !selectedPackage}
-              className="px-6 sm:px-8 py-2.5 sm:py-3 rounded-2xl bg-[#00c988] hover:bg-[#00b077] text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-[#00c988]/30 transition-all duration-200 disabled:opacity-50 min-h-[44px] flex items-center justify-center space-x-1.5 shrink-0 active:scale-95 cursor-pointer"
-            >
-              <span>{orderSubmitting ? 'ដំណើរការ...' : 'បញ្ជាទិញ'}</span>
-              <span className="text-base font-bold">›</span>
-            </button>
           </div>
-
-          {/* Quick error banner if validation fails */}
-          {error && (
-            <div className="max-w-md mx-auto mt-2 text-[10px] text-red-400 font-bold bg-red-950/80 p-1.5 rounded-lg border border-red-800 text-center">
-              ⚠️ {error}
-            </div>
-          )}
-        </div>
-
-        {/* ══ FLOATING TELEGRAM LIVE SUPPORT BUBBLE (Bottom-Right) ══════════════ */}
-        <a
-          href="https://t.me/darazzdev"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Chat with Support on Telegram"
-          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-40 h-12 w-12 rounded-full bg-[#229ED9] hover:bg-[#198fca] text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-110 active:scale-95 cursor-pointer group"
-        >
-          <Send className="h-5 w-5 fill-current -rotate-12 group-hover:scale-110 transition-transform" />
-        </a>
-      </main>
+        </main>
 
       <Footer />
     </>

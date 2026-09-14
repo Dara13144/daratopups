@@ -6,7 +6,7 @@ import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
 import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails, API_BASE } from '../../../lib/api';
 import { subscribeToOrderRealtime } from '../../../lib/supabase';
-import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft, RefreshCw } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft, RefreshCw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
@@ -22,7 +22,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
   const [verifyMsg, setVerifyMsg] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(true);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [verifyStatus, setVerifyStatus] = useState<'idle' | 'checking' | 'not_paid' | 'paid'>('idle');
   const [isMobile, setIsMobile] = useState(false);
   const autoOpenedRef = useRef<string | null>(null);
   const { t } = useLanguage();
@@ -92,31 +91,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       setError(`Failed to retrieve checkout order details from "${API_BASE}". Details: ${err.message || err}`);
     } finally {
       if (showLoading) setLoading(false);
-    }
-  };
-
-  // Manual verify button handler
-  const handleManualVerify = async () => {
-    if (verifyStatus === 'checking' || !order) return;
-    setVerifyStatus('checking');
-    try {
-      const res = await verifyPayment(order.paymentTxnId);
-      if (res && res.verified) {
-        setVerifyStatus('paid');
-        await fetchStatus(false);
-      } else {
-        setVerifyStatus('not_paid');
-        await fetchStatus(false);
-        setTimeout(() => {
-          setVerifyStatus((prev) => (prev === 'not_paid' ? 'idle' : prev));
-        }, 4000);
-      }
-    } catch (e) {
-      await fetchStatus(false);
-      setVerifyStatus('not_paid');
-      setTimeout(() => {
-        setVerifyStatus((prev) => (prev === 'not_paid' ? 'idle' : prev));
-      }, 4000);
     }
   };
 
@@ -447,7 +421,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                         Scan with mobile banking app<br/>that supports KHQR
                       </p>
                     </div>
-
                   </div>
                 ) : (
                   /* ABA PAYWAY CARD FLOW */

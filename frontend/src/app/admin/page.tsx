@@ -4,19 +4,23 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   fetchAdminStats, fetchAdminOrders, updateAdminOrderStatus,
-  fetchAdminStock, addAdminStock, fetchProducts, GameProduct,
+  fetchProducts, fetchAdminProducts, GameProduct,
   addAdminProduct, addAdminPackage, deleteAdminProduct, deleteAdminPackage,
   updateAdminProduct, updateAdminPackage, uploadAdminImage,
   downloadAdminBackup, createAdminSnapshot, fetchAdminSnapshots,
   restoreAdminBackup, deleteAdminSnapshot,
-  serverUrl, API_BASE
+  fetchAdminContactMessages, updateAdminContactMessage, deleteAdminContactMessage,
+  ContactMessageItem,
+  serverUrl, API_BASE, verifyPayment, getAuthToken, getAuthHeaders,
+  autoVerifyAllAdminOrders, autoFulfillAdminOrder
 } from '../../lib/api';
+import { subscribeToContactMessagesRealtime, subscribeToAllRealtime } from '../../lib/supabase';
 import {
   ShoppingBag, Database, TrendingUp, CheckCircle, Clock, Plus, RefreshCw,
   Search, Trash2, Gem, LogOut, Image as ImageIcon, Upload, Package,
   ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign,
   HardDrive, Download, ShieldCheck, History, RotateCcw, FileText, Check,
-  Pencil, Edit, Eye, EyeOff, SlidersHorizontal, Menu
+  Pencil, Edit, Eye, EyeOff, SlidersHorizontal, Menu, MessageSquare, Send, Mail, Phone
 } from 'lucide-react';
 import SecurityDashboard from '../../components/SecurityDashboard';
 
@@ -24,7 +28,7 @@ import SecurityDashboard from '../../components/SecurityDashboard';
 export default function AdminDashboard() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'stock' | 'products' | 'diamonds' | 'backup' | 'security'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'products' | 'diamonds' | 'contact' | 'backup' | 'security'>('metrics');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -43,10 +47,7 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
   const [orderFilter, setOrderFilter] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
-  const [stocks, setStocks] = useState<any[]>([]);
   const [allProducts, setAllProducts] = useState<GameProduct[]>([]);
-  const [selectedPackageId, setSelectedPackageId] = useState('');
-  const [newVoucherCodes, setNewVoucherCodes] = useState('');
   const [newProductName, setNewProductName] = useState('');
   const [newProductSlug, setNewProductSlug] = useState('');
   const [autoSeedPackages, setAutoSeedPackages] = useState(true);
@@ -74,10 +75,16 @@ export default function AdminDashboard() {
   const newPackageFileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [promptCode, setPromptCode] = useState('');
   const [activePromptOrderId, setActivePromptOrderId] = useState<string | null>(null);
+
+  // Auto Orders System States
+  const [autoSyncOrders, setAutoSyncOrders] = useState(true);
+  const [autoVerifyingAll, setAutoVerifyingAll] = useState(false);
+  const [autoFulfillingId, setAutoFulfillingId] = useState<string | null>(null);
 
   // Product Editor Modal State
   const [editingProductModal, setEditingProductModal] = useState<GameProduct | null>(null);
@@ -388,43 +395,211 @@ export default function AdminDashboard() {
     reader.readAsText(file);
   };
 
+  // Contact & Support Messages State
+  const [contactMessages, setContactMessages] = useState<ContactMessageItem[]>([]);
+  const [contactPendingCount, setContactPendingCount] = useState(0);
+  const [contactStatusFilter, setContactStatusFilter] = useState('ALL');
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [selectedContact, setSelectedContact] = useState<ContactMessageItem | null>(null);
+  const [contactReplyText, setContactReplyText] = useState('');
+  const [contactReplyStatus, setContactReplyStatus] = useState('RESOLVED');
+  const [contactActionLoading, setContactActionLoading] = useState(false);
+
+  const loadContactMessages = async () => {
+    try {
+      const res = await fetchAdminContactMessages();
+      setContactMessages(res.messages || []);
+      setContactPendingCount(res.pendingCount || 0);
+    } catch (e) {
+      console.error('Failed to load contact messages:', e);
+    }
+  };
+
+  const handleReplyContact = async (id: string) => {
+    setContactActionLoading(true);
+    try {
+      await updateAdminContactMessage(id, {
+        status: contactReplyStatus,
+        reply: contactReplyText.trim() || undefined,
+      });
+      setSuccess('Contact message status & reply updated successfully!');
+      setSelectedContact(null);
+      setContactReplyText('');
+      await loadContactMessages();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update contact message');
+    } finally {
+      setContactActionLoading(false);
+    }
+  };
+
+  const handleDeleteContact = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this support message?')) return;
+    setContactActionLoading(true);
+    try {
+      await deleteAdminContactMessage(id);
+      setSuccess('Support ticket deleted successfully');
+      setSelectedContact(null);
+      await loadContactMessages();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete contact message');
+    } finally {
+      setContactActionLoading(false);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true); setError('');
     try {
       const statsRes = await fetchAdminStats();
       setMetrics(statsRes.metrics); setRecentOrders(statsRes.recentOrders); setPopularity(statsRes.popularity);
       const ordersRes = await fetchAdminOrders(); setOrders(ordersRes);
-      const stockRes = await fetchAdminStock(); setStocks(stockRes.stocks);
-      const prodRes = await fetchProducts(); setAllProducts(prodRes);
+      const prodRes = await fetchAdminProducts(); setAllProducts(prodRes);
       await loadSnapshots();
+      await loadContactMessages();
       if (prodRes.length > 0) {
         setSelectedProductId(prodRes[0].id);
-        if (prodRes[0].packages.length > 0) setSelectedPackageId(prodRes[0].packages[0].id);
       }
-    } catch { setError('Failed to load data. Is backend running?'); }
+    } catch (err: any) {
+      const msg = err?.message || '';
+      console.warn('[Admin Dashboard] Load error:', err);
+      if (msg.includes('Unauthorized') || msg.includes('No token provided') || msg.includes('Forbidden') || msg.includes('token')) {
+        setError('Session expired or unauthorized. Please sign in to continue.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('admin_token');
+        setTimeout(() => {
+          router.push('/login?redirect=/admin');
+        }, 1500);
+      } else {
+        setError('Failed to load data. Is backend running?');
+      }
+    }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('user_role');
-    if (!token || role !== 'ADMIN') { router.push('/login'); return; }
-    setIsAdmin(true); loadAllData();
+    let active = true;
+    let unsubRealtime: (() => void) | null = null;
+
+    const verifyAuth = async () => {
+      let token = getAuthToken();
+      const adminEmails = ['mdara9695@gmail.com', 'admin@nadytopup.com', 'admin@topup.com', 'admin@gmail.com'];
+      const email = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
+      let role = typeof window !== 'undefined' ? localStorage.getItem('user_role') : null;
+
+      // 1. If no token in localStorage, try recovering from active Supabase session
+      if (!token) {
+        try {
+          const { supabase } = await import('../../lib/supabase');
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            token = session.access_token;
+            localStorage.setItem('token', token);
+            localStorage.setItem('admin_token', token);
+            if (session.user?.email) {
+              localStorage.setItem('user_email', session.user.email);
+              if (adminEmails.includes(session.user.email.toLowerCase())) {
+                role = 'ADMIN';
+                localStorage.setItem('user_role', 'ADMIN');
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[Admin] Supabase session recovery check error:', e);
+        }
+      }
+
+      // Check admin eligibility
+      const isEligibleAdmin = (role === 'ADMIN') || (email && adminEmails.includes(email.toLowerCase()));
+
+      if (!token || !isEligibleAdmin) {
+        if (active) {
+          router.push('/login?redirect=/admin');
+        }
+        return;
+      }
+
+      if (email && adminEmails.includes(email.toLowerCase()) && role !== 'ADMIN') {
+        localStorage.setItem('user_role', 'ADMIN');
+      }
+
+      if (!active) return;
+      setIsAdmin(true);
+      await loadAllData();
+
+      // Supabase Real-time subscriber for instant sync across all tables on delete / update / insert
+      unsubRealtime = subscribeToAllRealtime({
+        onProductChange: (payload) => {
+          console.log('[Admin Realtime] Product change/delete:', payload.eventType);
+          if (payload.eventType === 'DELETE' && payload.old?.id) {
+            setAllProducts((prev) => prev.filter((p) => p.id !== payload.old.id && p.slug !== payload.old.slug));
+          }
+          fetchAdminProducts().then(setAllProducts).catch(() => {});
+        },
+        onPackageChange: (payload) => {
+          console.log('[Admin Realtime] Package change/delete:', payload.eventType);
+          fetchAdminProducts().then(setAllProducts).catch(() => {});
+        },
+        onOrderChange: (payload) => {
+          console.log('[Admin Realtime] Order change/delete:', payload.eventType);
+          fetchAdminOrders().then(setOrders).catch(() => {});
+          fetchAdminStats().then(s => {
+            setMetrics(s.metrics);
+            setRecentOrders(s.recentOrders);
+            setPopularity(s.popularity);
+          }).catch(() => {});
+        },
+        onContactChange: (payload) => {
+          console.log('[Admin Realtime] ContactMessage change/delete:', payload.eventType);
+          loadContactMessages();
+        },
+      });
+    };
+
+    verifyAuth();
+
+    return () => {
+      active = false;
+      if (unsubRealtime) unsubRealtime();
+    };
   }, [router]);
 
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(''), 4000); return () => clearTimeout(t); } }, [success]);
   useEffect(() => { if (error) { const t = setTimeout(() => setError(''), 6000); return () => clearTimeout(t); } }, [error]);
 
-  const uploadImageToServer = async (file: File): Promise<string> => {
+  const uploadImageToServer = async (file: File, bucket = 'games'): Promise<string> => {
     setUploadingImage(true);
     try {
-      const token = localStorage.getItem('token') || '';
-      const form = new FormData(); form.append('image', file);
-      const res = await fetch(`${API_BASE}/admin/upload-image`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
-      if (!res.ok) throw new Error('Upload failed');
+      // 1. Try Supabase Storage first for cloud-hosted CDN asset delivery
+      try {
+        const { uploadToSupabaseStorage } = await import('../../lib/supabase');
+        const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_').toLowerCase();
+        const filePath = `${bucket}/${Date.now()}_${cleanName}`;
+        const publicUrl = await uploadToSupabaseStorage(bucket, filePath, file);
+        if (publicUrl) {
+          console.log('[Upload] Successfully uploaded to Supabase Storage:', publicUrl);
+          return publicUrl;
+        }
+      } catch (sbErr: any) {
+        console.warn('[Upload] Supabase Storage upload note (falling back to server upload):', sbErr?.message || sbErr);
+      }
+
+      // 2. Fallback to Backend Multer API upload
+      const token = getAuthToken() || '';
+      const form = new FormData();
+      form.append('image', file);
+      const res = await fetch(`${API_BASE}/admin/upload-image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
       const data = await res.json();
-      return `${serverUrl}${data.imageUrl}`;
-    } finally { setUploadingImage(false); }
+      const rawUrl = data.imageUrl || data.url;
+      if (!rawUrl) throw new Error('No image URL in response');
+      return rawUrl.startsWith('http') ? rawUrl : `${serverUrl}${rawUrl}`;
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleImageFileDrop = useCallback((file: File) => {
@@ -447,17 +622,63 @@ export default function AdminDashboard() {
     finally { setActionLoading(false); }
   };
 
-  const handleAddStockSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPackageId || !newVoucherCodes.trim()) { setError('Select package and enter codes'); return; }
+  const handleCheckOrderPayment = async (order: any) => {
     setActionLoading(true); setError(''); setSuccess('');
     try {
-      const data = await addAdminStock(selectedPackageId, newVoucherCodes);
-      setSuccess(data.message || 'Stock uploaded'); setNewVoucherCodes('');
-      const stockRes = await fetchAdminStock(); setStocks(stockRes.stocks);
-    } catch (err: any) { setError('Failed: ' + err.message); }
-    finally { setActionLoading(false); }
+      const res = await verifyPayment(order.paymentTxnId);
+      if (res && res.verified) {
+        setSuccess(`Payment verified! Order #${order.paymentTxnId.slice(0, 10)} updated to ${res.status || 'PAID'}`);
+        await loadAllData();
+      } else {
+        setError(res?.error || res?.message || 'Payment not yet confirmed by bank/gateway.');
+      }
+    } catch (err: any) {
+      setError('Payment verification check failed: ' + (err.message || err));
+    } finally {
+      setActionLoading(false);
+    }
   };
+
+  const handleAutoVerifyAll = async () => {
+    setAutoVerifyingAll(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await autoVerifyAllAdminOrders();
+      setSuccess(res.message || 'Auto-check finished!');
+      await loadAllData();
+    } catch (err: any) {
+      setError('Auto-check failed: ' + (err.message || err));
+    } finally {
+      setAutoVerifyingAll(false);
+    }
+  };
+
+  const handleAutoFulfillOrder = async (orderId: string) => {
+    setAutoFulfillingId(orderId);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await autoFulfillAdminOrder(orderId);
+      setSuccess(res.message || `Order #${orderId.slice(0, 10)} auto-fulfilled!`);
+      await loadAllData();
+    } catch (err: any) {
+      setError('Auto-fulfill failed: ' + (err.message || err));
+    } finally {
+      setAutoFulfillingId(null);
+    }
+  };
+
+  // Live Auto-Sync for Orders tab
+  useEffect(() => {
+    if (activeTab !== 'orders' || !autoSyncOrders || !isAdmin) return;
+    const interval = setInterval(() => {
+      fetchAdminOrders(orderFilter || undefined, orderSearch || undefined)
+        .then(setOrders)
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [activeTab, autoSyncOrders, isAdmin, orderFilter, orderSearch]);
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,9 +712,10 @@ export default function AdminDashboard() {
     setActionLoading(true); setError(''); setSuccess('');
     try {
       const imageUrl = await uploadImageToServer(editImageFile);
-      const token = localStorage.getItem('token') || '';
       const res = await fetch(`${API_BASE}/admin/products/${productId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify({ image: imageUrl }),
       });
       if (!res.ok) throw new Error('Update failed');
@@ -529,20 +751,91 @@ export default function AdminDashboard() {
     finally { setActionLoading(false); }
   };
 
-  const handleDeleteProduct = async (id: string) => {
-    if (!window.confirm('Delete this product and all packages?')) return;
-    setActionLoading(true); setError(''); setSuccess('');
-    try { await deleteAdminProduct(id); setSuccess('Product deleted'); await loadAllData(); }
-    catch (err: any) { setError('Failed: ' + err.message); }
-    finally { setActionLoading(false); }
+  const handleDeleteProduct = async (id: string, name?: string) => {
+    if (!id) {
+      console.error('Missing game ID');
+      return;
+    }
+
+    const gameName = name || allProducts.find((p) => p.id === id)?.name || id;
+    const confirmed = window.confirm(`Are you sure you want to delete "${gameName}" and all associated packages?`);
+    if (!confirmed) return;
+
+    console.log("Deleting game:", id);
+    setDeletingId(id);
+    setActionLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      // 1. Call Supabase / Backend API delete operation (with database post-verification)
+      await deleteAdminProduct(id);
+
+      // 2. Update React state only after confirmed deletion
+      setAllProducts((prevGames) => prevGames.filter((game) => game.id !== id && game.slug !== id));
+
+      // 3. Invalidate any client-side caches
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('cached_games');
+        sessionStorage.removeItem('products_cache');
+        localStorage.removeItem('cached_games');
+        localStorage.removeItem('products_cache');
+      }
+
+      // 4. Refetch latest authoritative data directly from Supabase / API
+      await loadAllData();
+
+      setSuccess(`Game "${gameName}" deleted successfully`);
+      console.log("Game deleted successfully from Supabase:", id);
+    } catch (err: any) {
+      console.error("Delete game error:", err);
+      setError(`Failed to delete game: ${err.message || err}`);
+      // On error, restore true state from database
+      await loadAllData();
+    } finally {
+      setDeletingId(null);
+      setActionLoading(false);
+    }
   };
 
-  const handleDeletePackage = async (id: string) => {
-    if (!window.confirm('Delete this package?')) return;
-    setActionLoading(true); setError(''); setSuccess('');
-    try { await deleteAdminPackage(id); setSuccess('Package deleted'); await loadAllData(); }
-    catch (err: any) { setError('Failed: ' + err.message); }
-    finally { setActionLoading(false); }
+  const handleDeletePackage = async (id: string, name?: string) => {
+    if (!id) {
+      console.error('Missing package ID');
+      return;
+    }
+
+    const confirmed = window.confirm(`Are you sure you want to delete package "${name || id}"?`);
+    if (!confirmed) return;
+
+    console.log("Deleting package:", id);
+    setActionLoading(true);
+    setError('');
+    setSuccess('');
+
+    // 1. Immediately remove from React state
+    setAllProducts((prevProds) =>
+      prevProds.map((p) => ({
+        ...p,
+        packages: (p.packages || []).filter((pkg) => pkg.id !== id),
+      }))
+    );
+
+    try {
+      // 2. Call delete operation
+      await deleteAdminPackage(id);
+
+      // 3. Refetch latest data
+      await loadAllData();
+
+      setSuccess('Package deleted successfully');
+      console.log("Package deleted successfully:", id);
+    } catch (err: any) {
+      console.error("Delete package error:", err);
+      setError('Failed to delete package: ' + (err.message || ''));
+      await loadAllData();
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleSearchOrders = async () => {
@@ -552,7 +845,18 @@ export default function AdminDashboard() {
     finally { setLoading(false); }
   };
 
-  const handleLogout = () => { localStorage.removeItem('token'); localStorage.removeItem('user_role'); router.push('/login'); };
+  const handleLogout = async () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_email');
+    try {
+      document.cookie = 'token=; Max-Age=0; path=/;';
+      const { supabase } = await import('../../lib/supabase');
+      await supabase.auth.signOut().catch(() => {});
+    } catch (e) {}
+    router.push('/login');
+  };
 
   const getStatusBadge = (status: string) => {
     const b = 'inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border';
@@ -583,9 +887,9 @@ export default function AdminDashboard() {
   const navItems = [
     { id: 'metrics', icon: BarChart3, label: 'Overview', count: null },
     { id: 'orders', icon: ShoppingBag, label: 'Orders', count: orders.length },
-    { id: 'stock', icon: Database, label: 'Voucher Stock', count: stocks.filter((s: any) => !s.isUsed).length },
     { id: 'products', icon: Package, label: 'Game Products', count: allProducts.length },
     { id: 'diamonds', icon: Gem, label: 'Diamonds / Packages', count: totalPackagesCount },
+    { id: 'contact', icon: MessageSquare, label: 'Customer Inquiries', count: contactPendingCount || (contactMessages.length || null) },
     { id: 'backup', icon: HardDrive, label: 'Backup & Restore', count: snapshots.length || null },
     { id: 'security', icon: ShieldCheck, label: 'Security & DDoS', count: null },
   ] as const;
@@ -826,6 +1130,34 @@ export default function AdminDashboard() {
                   </div>
                   <button onClick={handleSearchOrders} className="px-4 py-2 rounded-lg text-xs font-bold" style={{ background:'rgba(6,182,212,.1)', border:'1px solid rgba(6,182,212,.2)', color:'#06b6d4' }}>Search</button>
                   <button onClick={()=>{setOrderFilter('');setOrderSearch('');loadAllData();}} className="px-4 py-2 rounded-lg bg-slate-800 text-slate-400 text-xs font-bold hover:text-white">Reset</button>
+
+                  {/* Auto-Sync Live Orders Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setAutoSyncOrders(!autoSyncOrders)}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all ${
+                      autoSyncOrders
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10 shadow-sm'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}
+                    title="Real-time live sync every 4s"
+                  >
+                    <span className={`h-2 w-2 rounded-full ${autoSyncOrders ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>Auto-Sync: {autoSyncOrders ? 'ON' : 'OFF'}</span>
+                  </button>
+
+                  {/* Auto-Check All Pending Orders */}
+                  <button
+                    type="button"
+                    onClick={handleAutoVerifyAll}
+                    disabled={autoVerifyingAll || actionLoading}
+                    className="px-3.5 py-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all bg-gradient-to-r from-cyan-500/20 via-sky-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-300 hover:from-cyan-500/30 hover:to-blue-500/30 active:scale-95 disabled:opacity-50 shadow-cyan-500/10 shadow-sm"
+                    title="Automatically verify all pending orders with payment gateways and fulfill paid ones"
+                  >
+                    <Zap className={`h-3.5 w-3.5 text-cyan-400 ${autoVerifyingAll ? 'animate-spin' : ''}`} />
+                    <span>{autoVerifyingAll ? 'Auto-Checking...' : '⚡ Auto-Check All Pending'}</span>
+                  </button>
+
                   <span className="text-xs text-slate-500 ml-auto">{orders.length} records</span>
                 </div>
                 <div className={`${panelCls} overflow-hidden`} style={panelBg}>
@@ -850,7 +1182,27 @@ export default function AdminDashboard() {
                               <td className="px-4 py-3">
                                 {o.status==='PENDING'&&(
                                   <div className="flex items-center space-x-1">
-                                    <button onClick={()=>setActivePromptOrderId(o.id===activePromptOrderId?null:o.id)} className="px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap" style={{ background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.2)', color:'#10b981' }}>✓ Complete</button>
+                                    <button
+                                      onClick={() => handleAutoFulfillOrder(o.id)}
+                                      disabled={autoFulfillingId === o.id || actionLoading}
+                                      className="px-2 py-1 rounded text-[10px] font-bold flex items-center space-x-1 transition-all"
+                                      style={{ background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.3)', color: '#10b981' }}
+                                      title="One-click automatic fulfillment & settlement"
+                                    >
+                                      <Zap className={`h-2.5 w-2.5 ${autoFulfillingId === o.id ? 'animate-spin' : ''}`} />
+                                      <span>⚡ Auto Fulfill</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleCheckOrderPayment(o)}
+                                      disabled={actionLoading}
+                                      className="px-2 py-1 rounded text-[10px] font-bold flex items-center space-x-1 transition-all"
+                                      style={{ background: 'rgba(6,182,212,.12)', border: '1px solid rgba(6,182,212,.25)', color: '#06b6d4' }}
+                                      title="Check live payment status from bank"
+                                    >
+                                      <RefreshCw className={`h-2.5 w-2.5 ${actionLoading ? 'animate-spin' : ''}`} />
+                                      <span>Check Payment</span>
+                                    </button>
+                                    <button onClick={()=>setActivePromptOrderId(o.id===activePromptOrderId?null:o.id)} className="px-2 py-1 rounded text-[10px] font-bold whitespace-nowrap" style={{ background:'rgba(56,189,248,.1)', border:'1px solid rgba(56,189,248,.2)', color:'#38bdf8' }}>Manual Code</button>
                                     <button onClick={()=>handleUpdateStatus(o.id,'FAILED')} disabled={actionLoading} className="px-2 py-1 rounded text-[10px] font-bold" style={{ background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.2)', color:'#ef4444' }}>✗</button>
                                   </div>
                                 )}
@@ -876,58 +1228,6 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* ── TAB 3: STOCK ──────────────────────────────────── */}
-            {activeTab==='stock'&&(
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className={`${panelCls} p-5 h-fit`} style={panelBg}>
-                  <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><Plus className="h-4 w-4 text-cyan-400" /><span>Upload Voucher Codes</span></h3>
-                  <form onSubmit={handleAddStockSubmit} className="space-y-4 text-xs">
-                    <div>
-                      <label className="block text-slate-400 font-semibold mb-1.5">Package</label>
-                      <select value={selectedPackageId} onChange={e=>setSelectedPackageId(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg text-slate-300 p-2.5 focus:outline-none focus:border-cyan-500">
-                        {allProducts.flatMap((prod, pIdx)=>(prod.packages || []).map((pkg, kIdx)=><option key={`opt-${prod.id || pIdx}-${pkg.id || kIdx}`} value={pkg.id}>{prod.name} — {pkg.name}</option>))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-400 font-semibold mb-1.5">Codes (one per line)</label>
-                      <textarea required rows={6} placeholder={"CODE-001\nCODE-002"} value={newVoucherCodes} onChange={e=>setNewVoucherCodes(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono resize-none text-xs" />
-                    </div>
-                    <button type="submit" disabled={actionLoading} className="w-full flex items-center justify-center space-x-1.5 py-2.5 rounded-xl text-white font-bold text-xs disabled:opacity-50" style={btnGrad}>
-                      <Upload className="h-3.5 w-3.5" /><span>Upload Stock</span>
-                    </button>
-                  </form>
-                </div>
-                <div className={`xl:col-span-2 ${panelCls} overflow-hidden`} style={panelBg}>
-                  <div className="flex items-center justify-between p-5 border-b border-slate-800">
-                    <h3 className="text-white font-extrabold text-sm flex items-center space-x-2"><Database className="h-4 w-4 text-cyan-400" /><span>Inventory</span></h3>
-                    <div className="flex items-center space-x-2 text-xs">
-                      <span className="px-2 py-0.5 rounded font-bold" style={{ background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.2)', color:'#10b981' }}>{stocks.filter((s:any)=>!s.isUsed).length} avail</span>
-                      <span className="px-2 py-0.5 rounded font-bold bg-slate-800 text-slate-500">{stocks.filter((s:any)=>s.isUsed).length} used</span>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto" style={{ maxHeight:480, overflowY:'auto' }}>
-                    <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 border-b border-slate-800" style={{ background:'rgba(15,23,42,.95)' }}>
-                        <tr className="text-slate-500 uppercase tracking-wider">
-                          {['Package','Code','Status','Added'].map(h=><th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {stocks.map((st: any, sIdx: number) => (
-                          <tr key={`stock-${st.id || sIdx}-${sIdx}`} className="hover:bg-slate-800/20">
-                            <td className="px-4 py-3"><div className="text-white font-semibold">{st.package?.product?.name}</div><div className="text-slate-500 text-[10px]">{st.package?.name}</div></td>
-                            <td className="px-4 py-3 font-mono text-slate-300">{st.code}</td>
-                            <td className="px-4 py-3">{st.isUsed?<span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900 text-slate-500 border border-slate-800">USED</span>:<span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.2)', color:'#10b981' }}>AVAIL</span>}</td>
-                            <td className="px-4 py-3 text-slate-500">{new Date(st.createdAt).toLocaleDateString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* ── TAB 4: PRODUCTS ──────────────────────────────── */}
             {activeTab==='products'&&(
@@ -1277,9 +1577,9 @@ export default function AdminDashboard() {
                                 </button>
 
                                 <button
-                                  onClick={() => handleDeleteProduct(prod.id)}
-                                  disabled={actionLoading}
-                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+                                  onClick={() => handleDeleteProduct(prod.id, prod.name)}
+                                  disabled={actionLoading || deletingId === prod.id}
+                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all disabled:opacity-50"
                                   title="Delete Product"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -2367,6 +2667,265 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* ── TAB: CUSTOMER CONTACT & SUPPORT INQUIRIES ────────── */}
+            {activeTab === 'contact' && (
+              <div className="space-y-6">
+                {/* Header Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className={`${panelCls} p-4`} style={panelBg}>
+                    <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total Inquiries</div>
+                    <div className="text-2xl font-black text-white mt-1">{contactMessages.length}</div>
+                  </div>
+                  <div className={`${panelCls} p-4 border-amber-500/30`} style={panelBg}>
+                    <div className="text-[11px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      <span>Pending Review</span>
+                    </div>
+                    <div className="text-2xl font-black text-amber-300 mt-1">{contactPendingCount}</div>
+                  </div>
+                  <div className={`${panelCls} p-4 border-blue-500/30`} style={panelBg}>
+                    <div className="text-[11px] text-blue-400 font-bold uppercase tracking-wider">In Progress</div>
+                    <div className="text-2xl font-black text-blue-300 mt-1">
+                      {contactMessages.filter(m => m.status === 'IN_PROGRESS').length}
+                    </div>
+                  </div>
+                  <div className={`${panelCls} p-4 border-emerald-500/30`} style={panelBg}>
+                    <div className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Resolved</div>
+                    <div className="text-2xl font-black text-emerald-300 mt-1">
+                      {contactMessages.filter(m => m.status === 'RESOLVED').length}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className={`${panelCls} p-4 flex flex-col sm:flex-row items-center justify-between gap-3`} style={panelBg}>
+                  <div className="flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                      <input
+                        type="text"
+                        value={contactSearchQuery}
+                        onChange={(e) => setContactSearchQuery(e.target.value)}
+                        placeholder="Search by name, email, Telegram, Txn ID..."
+                        className={inputCls + ' pl-9'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                    <select
+                      value={contactStatusFilter}
+                      onChange={(e) => setContactStatusFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                      <option value="ALL">All Statuses</option>
+                      <option value="PENDING">Pending Only</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RESOLVED">Resolved</option>
+                    </select>
+
+                    <button
+                      onClick={loadContactMessages}
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors"
+                      title="Refresh Inquiries"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Messages List Table */}
+                <div className={`${panelCls} overflow-hidden`} style={panelBg}>
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-pink-400" />
+                      <span>Customer Inquiries & Support Tickets</span>
+                    </h3>
+                    <span className="text-[11px] text-slate-400">
+                      Live sync with Supabase PostgreSQL
+                    </span>
+                  </div>
+
+                  {contactMessages.length === 0 ? (
+                    <div className="text-center py-16 text-slate-500 text-xs">
+                      <MessageSquare className="h-8 w-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                      <p>No contact messages found.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-800/60 overflow-x-auto">
+                      {contactMessages
+                        .filter(msg => {
+                          if (contactStatusFilter !== 'ALL' && msg.status !== contactStatusFilter) return false;
+                          if (!contactSearchQuery) return true;
+                          const q = contactSearchQuery.toLowerCase();
+                          return (
+                            msg.name.toLowerCase().includes(q) ||
+                            msg.email.toLowerCase().includes(q) ||
+                            msg.subject.toLowerCase().includes(q) ||
+                            msg.message.toLowerCase().includes(q) ||
+                            (msg.telegram && msg.telegram.toLowerCase().includes(q)) ||
+                            (msg.txnId && msg.txnId.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`p-4 transition-colors hover:bg-slate-900/50 ${
+                              selectedContact?.id === msg.id ? 'bg-slate-900/80 border-l-2 border-pink-500' : ''
+                            }`}
+                          >
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
+                                  <span className="font-bold text-sm text-white">{msg.name}</span>
+                                  <span className="text-xs text-slate-400">({msg.email})</span>
+                                  {msg.telegram && (
+                                    <span className="px-2 py-0.5 rounded-md bg-sky-950 text-sky-400 border border-sky-800/60 text-[10px] font-mono">
+                                      Telegram: {msg.telegram}
+                                    </span>
+                                  )}
+                                  {msg.phone && (
+                                    <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-mono">
+                                      Tel: {msg.phone}
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    msg.status === 'RESOLVED'
+                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                      : msg.status === 'IN_PROGRESS'
+                                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
+                                  }`}>
+                                    {msg.status}
+                                  </span>
+                                </div>
+
+                                <div className="text-xs text-pink-300 font-semibold mt-1">
+                                  Subject: {msg.subject}
+                                  {msg.txnId && (
+                                    <span className="ml-2 font-mono text-[11px] text-cyan-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                                      Txn: {msg.txnId}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-xs text-slate-300 mt-2 bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 leading-relaxed">
+                                  {msg.message}
+                                </p>
+
+                                {msg.reply && (
+                                  <div className="mt-2 text-xs bg-purple-950/30 p-2.5 rounded-xl border border-purple-900/40 text-purple-200">
+                                    <strong className="text-purple-400 block text-[10px] uppercase">Your Reply:</strong>
+                                    {msg.reply}
+                                  </div>
+                                )}
+
+                                <div className="text-[10px] text-slate-500 mt-2">
+                                  Received: {new Date(msg.createdAt).toLocaleString()} • Ticket ID: <span className="font-mono text-slate-400">{msg.id}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2 shrink-0 md:self-start">
+                                <button
+                                  onClick={() => {
+                                    setSelectedContact(msg);
+                                    setContactReplyText(msg.reply || '');
+                                    setContactReplyStatus(msg.status || 'RESOLVED');
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/40 text-xs font-bold transition-all"
+                                >
+                                  Reply / Status
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteContact(msg.id)}
+                                  disabled={contactActionLoading}
+                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all"
+                                  title="Delete Message"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Reply / Update Modal */}
+                {selectedContact && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 text-slate-200 z-10 animate-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+                        <div className="flex items-center space-x-2">
+                          <MessageSquare className="h-5 w-5 text-pink-400" />
+                          <h3 className="font-black text-base text-white">Reply & Update Support Ticket</h3>
+                        </div>
+                        <button
+                          onClick={() => setSelectedContact(null)}
+                          className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="text-xs space-y-2 mb-4 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                        <div><strong>Customer:</strong> {selectedContact.name} ({selectedContact.email})</div>
+                        {selectedContact.telegram && <div><strong>Telegram:</strong> {selectedContact.telegram}</div>}
+                        <div><strong>Subject:</strong> {selectedContact.subject}</div>
+                        <div className="text-slate-400"><strong>Message:</strong> &quot;{selectedContact.message}&quot;</div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1">Update Status</label>
+                          <select
+                            value={contactReplyStatus}
+                            onChange={(e) => setContactReplyStatus(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+                          >
+                            <option value="PENDING">Pending</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="RESOLVED">Resolved</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-300 mb-1">Admin Response Note / Reply</label>
+                          <textarea
+                            rows={4}
+                            value={contactReplyText}
+                            onChange={(e) => setContactReplyText(e.target.value)}
+                            placeholder="Type reply or resolution notes for customer..."
+                            className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 text-xs placeholder-slate-600 focus:outline-none focus:border-pink-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end space-x-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedContact(null)}
+                            className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white text-xs font-bold"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={contactActionLoading}
+                            onClick={() => handleReplyContact(selectedContact.id)}
+                            className="px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-violet-600 text-white text-xs font-black flex items-center space-x-1.5 shadow-md disabled:opacity-50"
+                          >
+                            {contactActionLoading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            <span>Save & Update Ticket</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

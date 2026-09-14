@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   LogOut, LayoutDashboard, Menu, X, 
   Home, Gamepad2, Send, User, ChevronRight, Sparkles,
-  Sun, Search, Zap, HelpCircle, Users, Award, ShieldCheck
+  Sun, Search, Zap, HelpCircle, Users, Award, ShieldCheck, MessageSquare
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
@@ -38,7 +38,10 @@ export default function Header() {
   useEffect(() => {
     fetchProducts().then(setAllGames).catch(console.error);
 
-    const unsubscribe = subscribeToProductsRealtime(() => {
+    const unsubscribe = subscribeToProductsRealtime((payload) => {
+      if (payload?.eventType === 'DELETE' && payload.old?.id) {
+        setAllGames((prev) => prev.filter((g) => g.id !== payload.old.id && g.slug !== payload.old.slug));
+      }
       fetchProducts().then(setAllGames).catch(console.error);
     });
 
@@ -166,6 +169,14 @@ export default function Header() {
               >
                 FAQ
               </button>
+
+              {/* Contact & Support */}
+              <Link
+                href="/contact"
+                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-pink-400 font-bold transition-colors"
+              >
+                ទាក់ទង
+              </Link>
 
               {/* Telegram Updates Sky Blue Pill */}
               <button
@@ -671,6 +682,18 @@ export default function Header() {
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-600" />
               </button>
+
+              <Link
+                href="/contact"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between p-3 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <MessageSquare className="h-4 w-4 text-pink-400" />
+                  <span>ទាក់ទងមកយើង (Contact & Support)</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-600" />
+              </Link>
 
               <a
                 href="https://t.me/darazzdev"

@@ -69,7 +69,7 @@ export default function Footer() {
           {/* Thin Divider */}
           <div className="w-full max-w-2xl mx-auto border-t border-slate-800/80 mb-6"></div>
 
-          {/* Privacy Policy & Support Links */}
+          {/* Privacy Policy, Contact & Support Links */}
           <div className="flex items-center justify-center space-x-3 text-xs font-semibold text-slate-400 mb-3">
             <button
               type="button"
@@ -79,12 +79,19 @@ export default function Footer() {
               Privacy Policy
             </button>
             <span className="text-slate-600">|</span>
+            <Link
+              href="/contact"
+              className="hover:text-pink-400 transition-colors cursor-pointer"
+            >
+              ទាក់ទងមកយើង (Contact Us)
+            </Link>
+            <span className="text-slate-600">|</span>
             <button
               type="button"
               onClick={() => setSupportModalOpen(true)}
               className="hover:text-white transition-colors cursor-pointer"
             >
-              Support
+              Support Info
             </button>
           </div>
 

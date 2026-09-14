@@ -6,7 +6,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import GameIcon from '../components/GameIcon';
 import { fetchProducts, GameProduct, API_BASE } from '../lib/api';
-import { subscribeToProductsRealtime } from '../lib/supabase';
+import { subscribeToProductsRealtime, subscribeToAllRealtime } from '../lib/supabase';
 import { AlertCircle, Gamepad2, Search, X, Sparkles, ChevronRight, ChevronLeft, Flame } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
@@ -54,10 +54,19 @@ export default function Home() {
 
     loadProducts();
 
-    // Live Supabase Realtime WebSocket listener for instant product catalog synchronization
-    const unsubscribe = subscribeToProductsRealtime(() => {
-      console.log('[Supabase Realtime] Product catalog updated, refreshing live list...');
-      loadProducts();
+    // Live Supabase Realtime WebSocket listener for instant product & package changes & deletes
+    const unsubscribe = subscribeToAllRealtime({
+      onProductChange: (payload) => {
+        console.log('[Supabase Realtime] Product event received:', payload.eventType);
+        if (payload.eventType === 'DELETE' && payload.old?.id) {
+          setProducts((prev) => prev.filter((p) => p.id !== payload.old.id && p.slug !== payload.old.slug));
+        }
+        loadProducts();
+      },
+      onPackageChange: (payload) => {
+        console.log('[Supabase Realtime] Package event received:', payload.eventType);
+        loadProducts();
+      },
     });
 
     return () => {
@@ -286,81 +295,6 @@ export default function Home() {
               <h4 className="font-bold mb-1">{t.serverIssueTitle}</h4>
               <p>{error}</p>
             </div>
-          </div>
-        )}
-
-        {/* Featured Hot Games Cards */}
-        {!searchQuery && products.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
-            {[
-              {
-                title: 'Mobile Legends',
-                slugMatch: 'mobile-legends',
-                tags: ['Diamonds', 'Network Provider'],
-                subtext: '110 Diamonds sold',
-                isHot: true,
-                isBlue: true,
-              },
-              {
-                title: 'FREE FIRE KH',
-                slugMatch: 'free-fire',
-                tags: ['Diamonds', 'Network Provider'],
-                subtext: 'Free Fire Diamonds Instant',
-                isHot: false,
-                isBlue: false,
-              },
-            ].map((feat, idx) => {
-              const matchedGame = products.find(p => 
-                p.slug.toLowerCase().includes(feat.slugMatch) || 
-                p.name.toLowerCase().includes(feat.title.toLowerCase())
-              ) || products[idx] || products[0];
-
-              if (!matchedGame) return null;
-
-              return (
-                <Link
-                  key={`feat-${idx}-${matchedGame.id}`}
-                  href={`/games/${matchedGame.slug}`}
-                  className="group relative flex items-center justify-between p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 border-l-[5px] sm:border-l-[6px] border-l-cyan-500 shadow-md hover:shadow-cyan-500/10 hover:border-slate-700 transition-all duration-200 hover:-translate-y-0.5 overflow-hidden min-h-[84px]"
-                >
-                  <div className="flex items-center space-x-2.5 sm:space-x-4 min-w-0 flex-1">
-                    <div className="relative h-14 w-14 sm:h-20 sm:w-20 rounded-xl sm:rounded-2xl overflow-hidden shrink-0 bg-slate-950 border border-slate-800 shadow-xs">
-                      <GameIcon slug={matchedGame.slug} name={matchedGame.name} image={matchedGame.image} className="w-full h-full" />
-                      {feat.isHot && (
-                        <span className="absolute top-0 right-0 z-20 bg-[#f59e0b] text-slate-950 font-black text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded-bl-lg uppercase shadow-xs">
-                          HOT
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className={`font-extrabold text-xs sm:text-base ${feat.isBlue ? 'text-cyan-400' : 'text-white'} truncate`}>
-                        {feat.title}
-                      </h3>
-                      <div className="flex items-center gap-1 sm:gap-1.5 mt-1 sm:mt-1.5 flex-wrap">
-                        {feat.tags.map((tag, tIdx) => (
-                          <span
-                            key={tIdx}
-                            className="text-[9px] sm:text-xs text-slate-300 font-semibold px-2 py-0.2 sm:px-2.5 sm:py-0.5 rounded-full border border-slate-700 bg-slate-950"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      {feat.subtext && (
-                        <p className="text-[10px] sm:text-xs font-black text-cyan-400 mt-1 sm:mt-2 truncate">
-                          {feat.subtext}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="ml-2 sm:ml-3 shrink-0">
-                    <span className="inline-flex items-center px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-[#f59e0b] hover:bg-[#d97706] text-slate-950 font-black text-[10px] sm:text-xs uppercase tracking-wide shadow-xs transition-transform group-hover:scale-105 select-none min-h-[36px]">
-                      VIEW →
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
           </div>
         )}
 

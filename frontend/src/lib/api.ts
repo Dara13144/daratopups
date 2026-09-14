@@ -1,6 +1,6 @@
-const PRODUCTION_API = 'https://nadybackend.onrender.com';
+const PRODUCTION_API = 'http://localhost:5001';
 
-// Retrieve the raw backend URL from env, default fallback to production Render URL
+// Retrieve the raw backend URL from env, default fallback to http://localhost:5001
 const rawApiUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
@@ -108,19 +108,84 @@ export interface OrderStatusDetails {
   abaApiUrl?: string | null;
 }
 
+// Universal Token Retriever: checks localStorage, admin_token, Supabase auth sessions, sessionStorage, and cookies
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  // 1. Direct 'token' key
+  let token = localStorage.getItem('token');
+  if (token && token !== 'null' && token !== 'undefined' && token.trim()) {
+    return token.trim();
+  }
+
+  // 2. 'admin_token' key
+  token = localStorage.getItem('admin_token');
+  if (token && token !== 'null' && token !== 'undefined' && token.trim()) {
+    return token.trim();
+  }
+
+  // 3. 'access_token' or 'sb-access-token'
+  token = localStorage.getItem('access_token') || localStorage.getItem('sb-access-token');
+  if (token && token !== 'null' && token !== 'undefined' && token.trim()) {
+    return token.trim();
+  }
+
+  // 4. Inspect any Supabase auth session keys in localStorage (e.g. sb-*-auth-token)
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && ((key.startsWith('sb-') && key.endsWith('-auth-token')) || key === 'supabase.auth.token')) {
+        const itemStr = localStorage.getItem(key);
+        if (itemStr) {
+          const parsed = JSON.parse(itemStr);
+          const sbToken = parsed?.access_token || parsed?.currentSession?.access_token;
+          if (sbToken && typeof sbToken === 'string' && sbToken.trim()) {
+            localStorage.setItem('token', sbToken.trim());
+            if (parsed?.user?.email) {
+              localStorage.setItem('user_email', parsed.user.email);
+            }
+            return sbToken.trim();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore JSON parse errors
+  }
+
+  // 5. Check sessionStorage
+  try {
+    const sToken = sessionStorage.getItem('token') || sessionStorage.getItem('admin_token');
+    if (sToken && sToken !== 'null' && sToken !== 'undefined' && sToken.trim()) {
+      return sToken.trim();
+    }
+  } catch (e) {}
+
+  // 6. Check document.cookie
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)token=([^;]+)/);
+    if (match && match[1] && match[1] !== 'null' && match[1] !== 'undefined') {
+      const cToken = decodeURIComponent(match[1]).trim();
+      localStorage.setItem('token', cToken);
+      return cToken;
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 // Helper to fetch authorization header
 export function getAuthHeaders(token?: string): Record<string, string> {
-  const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+  const t = token || getAuthToken();
   return t ? { 'Authorization': `Bearer ${t}` } : {};
 }
 
-import { FALLBACK_PRODUCTS } from './fallbackProducts';
-
 export async function fetchProducts(): Promise<GameProduct[]> {
+  // 1. Try Backend API (which queries Supabase PostgreSQL directly)
   try {
     const res = await fetch(`${API_BASE}/products`, {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
     });
     if (res.ok) {
       const data = await res.json();
@@ -129,9 +194,63 @@ export async function fetchProducts(): Promise<GameProduct[]> {
       }
     }
   } catch (err) {
-    console.warn('[API] Failed to fetch live products, using resilient catalog:', err);
+    console.warn('[API] Live products API check failed, fetching from Supabase client direct:', err);
   }
-  return FALLBACK_PRODUCTS;
+
+  // 2. Direct Supabase Query Fallback
+  try {
+    const { getSupabaseClient } = await import('./supabase');
+    const client = getSupabaseClient();
+    const { data: supabaseProds, error } = await client
+      .from('Product')
+      .select('*, packages:Package(*)')
+      .eq('isActive', true)
+      .order('name', { ascending: true });
+
+    if (!error && Array.isArray(supabaseProds)) {
+      return supabaseProds.map((p: any) => ({
+        ...p,
+        packages: (p.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+      }));
+    }
+  } catch (supabaseErr) {
+    console.warn('[API] Supabase direct catalog fetch warning:', supabaseErr);
+  }
+
+  // Return empty list if no products exist in Supabase — NEVER return stale hardcoded catalog
+  return [];
+}
+
+/**
+ * Loads products for the Admin Dashboard directly from Supabase (Single Source of Truth)
+ */
+export async function fetchAdminProducts(): Promise<GameProduct[]> {
+  // 1. Direct Supabase Query First
+  try {
+    const { fetchGamesFromSupabase } = await import('./supabase');
+    const sbGames = await fetchGamesFromSupabase();
+    if (Array.isArray(sbGames)) {
+      return sbGames;
+    }
+  } catch (err) {
+    console.warn('[API] Direct Supabase fetch warning, falling back to API:', err);
+  }
+
+  // 2. Fallback to backend API
+  try {
+    const res = await fetch(`${API_BASE}/products`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', ...getAuthHeaders() },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (apiErr) {
+    console.warn('[API] Fallback fetch products warning:', apiErr);
+  }
+
+  return [];
 }
 
 export async function fetchProduct(slug: string): Promise<GameProduct> {
@@ -147,7 +266,7 @@ export async function fetchProduct(slug: string): Promise<GameProduct> {
     try {
       const res = await fetch(url, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
       });
       if (res.ok) {
         return await res.json();
@@ -160,17 +279,24 @@ export async function fetchProduct(slug: string): Promise<GameProduct> {
     }
   }
 
-  // If server responded with 404, product was deleted or does not exist
-  if (isExplicit404) {
-    throw new Error('Product not found or has been removed');
-  }
+  // Direct Supabase Query Fallback
+  try {
+    const { getSupabaseClient } = await import('./supabase');
+    const client = getSupabaseClient();
+    const { data: prodData, error } = await client
+      .from('Product')
+      .select('*, packages:Package(*)')
+      .or(`slug.eq.${slug.trim()},id.eq.${slug.trim()}`)
+      .single();
 
-  // If network unreachable, check static catalog fallback
-  const fallback = FALLBACK_PRODUCTS.find(
-    (p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug
-  );
-  if (fallback) {
-    return fallback;
+    if (!error && prodData) {
+      return {
+        ...prodData,
+        packages: (prodData.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+      };
+    }
+  } catch (err) {
+    console.warn('[API] Supabase direct single product lookup warning:', err);
   }
 
   throw new Error('Product not found or has been removed');
@@ -456,17 +582,22 @@ export async function fetchAdminStats() {
     'http://localhost:5001/api/admin/stats',
   ];
 
+  let lastError = 'Failed to fetch admin stats';
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) return await res.json();
-    } catch (e) {
+      const err = await res.json().catch(() => ({}));
+      if (err.error) lastError = err.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
       console.warn(`fetchAdminStats failed on ${url}, trying next endpoint...`);
     }
   }
-  throw new Error('Failed to fetch admin stats');
+  throw new Error(lastError);
 }
 
 export async function fetchAdminOrders(status?: string, search?: string) {
@@ -480,17 +611,22 @@ export async function fetchAdminOrders(status?: string, search?: string) {
     `http://localhost:5001/api/admin/orders${queryStr}`,
   ];
 
+  let lastError = 'Failed to fetch orders';
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) return await res.json();
-    } catch (e) {
+      const err = await res.json().catch(() => ({}));
+      if (err.error) lastError = err.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
       console.warn(`fetchAdminOrders failed on ${url}, trying next endpoint...`);
     }
   }
-  throw new Error('Failed to fetch orders');
+  throw new Error(lastError);
 }
 
 export async function updateAdminOrderStatus(id: string, status: string, code?: string) {
@@ -500,10 +636,81 @@ export async function updateAdminOrderStatus(id: string, status: string, code?: 
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
     },
+    credentials: 'include',
     body: JSON.stringify({ status, stockDeliveredCode: code }),
   });
   if (!res.ok) throw new Error('Failed to update order status');
   return res.json();
+}
+
+/**
+ * Auto-verify all pending orders against payment gateways
+ */
+export async function autoVerifyAllAdminOrders(): Promise<{
+  success: boolean;
+  message: string;
+  totalChecked: number;
+  verifiedPaid: number;
+}> {
+  const endpoints = [
+    `${API_BASE}/admin/orders/auto-verify-all`,
+    'http://localhost:5001/api/admin/orders/auto-verify-all',
+  ];
+
+  let lastError = 'Failed to auto-verify orders';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        credentials: 'include',
+      });
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      if (err.error) lastError = err.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
+  }
+  throw new Error(lastError);
+}
+
+/**
+ * Instant auto-fulfillment for an order
+ */
+export async function autoFulfillAdminOrder(orderId: string): Promise<{
+  success: boolean;
+  message: string;
+  order: any;
+  stockCode?: string;
+}> {
+  const endpoints = [
+    `${API_BASE}/admin/orders/${encodeURIComponent(orderId)}/auto-fulfill`,
+    `http://localhost:5001/api/admin/orders/${encodeURIComponent(orderId)}/auto-fulfill`,
+  ];
+
+  let lastError = 'Failed to auto-fulfill order';
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        credentials: 'include',
+      });
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      if (err.error) lastError = err.error;
+    } catch (e: any) {
+      if (e?.message) lastError = e.message;
+    }
+  }
+  throw new Error(lastError);
 }
 
 export async function fetchAdminStock() {
@@ -578,6 +785,32 @@ export async function addAdminProduct(
       if (e.message) lastError = e.message;
     }
   }
+
+  // Direct Supabase Fallback if backend API is offline
+  try {
+    const { getSupabaseClient } = await import('./supabase');
+    const client = getSupabaseClient();
+    const finalSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `game-${Date.now()}`;
+    const { data: newProd, error: sbErr } = await client
+      .from('Product')
+      .insert({
+        name: name.trim(),
+        slug: finalSlug,
+        category: category.trim(),
+        image: image && image.trim() ? image.trim() : `/images/games/${finalSlug}.png`,
+        isActive: true,
+      })
+      .select('*, packages:Package(*)')
+      .single();
+
+    if (!sbErr && newProd) {
+      return { message: 'Product created successfully in Supabase', product: newProd };
+    }
+    if (sbErr) lastError = sbErr.message;
+  } catch (directErr: any) {
+    console.warn('[API] Direct Supabase insert warning:', directErr);
+  }
+
   throw new Error(lastError);
 }
 
@@ -740,6 +973,12 @@ export async function updateAdminPackage(id: string, data: { name?: string; amou
 }
 
 export async function deleteAdminProduct(id: string) {
+  if (!id) {
+    console.error('[API] Missing game ID for delete');
+    throw new Error('Missing game ID');
+  }
+
+  console.log('[API] Permanently deleting game from database with ID:', id);
   const cleanId = encodeURIComponent(id.trim());
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const headers: Record<string, string> = {
@@ -747,6 +986,20 @@ export async function deleteAdminProduct(id: string) {
     ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
   };
 
+  let isDeleted = false;
+
+  // 1. Direct Supabase Client Delete with Verification (Primary Single Source of Truth)
+  try {
+    const { deleteGameFromSupabase } = await import('./supabase');
+    const sbSuccess = await deleteGameFromSupabase(id);
+    if (sbSuccess) {
+      isDeleted = true;
+    }
+  } catch (sbErr: any) {
+    console.warn('[API] Direct Supabase delete warning:', sbErr?.message || sbErr);
+  }
+
+  // 2. Delete via Backend API (Deletes cascaded Prisma records & notifies Realtime)
   const endpoints = [
     `${API_BASE}/admin/products/${cleanId}`,
     `${serverUrl}/api/admin/products/${cleanId}`,
@@ -754,29 +1007,57 @@ export async function deleteAdminProduct(id: string) {
     `${serverUrl}/api/products/${cleanId}`,
   ];
 
-  let lastError = 'Failed to delete product';
-
   for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         method: 'DELETE',
         headers,
       });
-      const data = await res.json().catch(() => null);
       if (res.ok) {
-        return data || { success: true };
-      }
-      if (data?.error) {
-        lastError = data.error;
+        isDeleted = true;
+        break;
       }
     } catch (e: any) {
-      if (e?.message) lastError = e.message;
+      console.warn(`[API] Delete attempt failed on ${url}:`, e?.message);
     }
   }
-  throw new Error(lastError);
+
+  // 3. Post-Delete Supabase Verification Check
+  try {
+    const { getSupabaseClient } = await import('./supabase');
+    const client = getSupabaseClient();
+    const { data: checkRecord } = await client
+      .from('Product')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (checkRecord) {
+      console.error('[API] GAME WAS NOT ACTUALLY DELETED FROM SUPABASE:', checkRecord);
+      throw new Error(`Game "${id}" was not deleted from Supabase. Aborting.`);
+    }
+    isDeleted = true;
+  } catch (verErr: any) {
+    if (verErr.message?.includes('was not deleted from Supabase')) {
+      throw verErr;
+    }
+  }
+
+  if (!isDeleted) {
+    throw new Error('Failed to delete game from database. Please check permissions.');
+  }
+
+  console.log('[API] Game successfully verified deleted from Supabase & Backend:', id);
+  return { success: true, id };
 }
 
 export async function deleteAdminPackage(id: string) {
+  if (!id) {
+    console.error('[API] Missing package ID for delete');
+    throw new Error('Missing package ID');
+  }
+
+  console.log('[API] Deleting package from database:', id);
   const cleanId = encodeURIComponent(id.trim());
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const headers: Record<string, string> = {
@@ -784,12 +1065,13 @@ export async function deleteAdminPackage(id: string) {
     ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
   };
 
+  let isDeleted = false;
+
+  // 1. Delete via Backend API
   const endpoints = [
     `${API_BASE}/admin/packages/${cleanId}`,
     `${serverUrl}/api/admin/packages/${cleanId}`,
   ];
-
-  let lastError = 'Failed to delete package';
 
   for (const url of endpoints) {
     try {
@@ -797,24 +1079,37 @@ export async function deleteAdminPackage(id: string) {
         method: 'DELETE',
         headers,
       });
-      const data = await res.json().catch(() => null);
       if (res.ok) {
-        return data || { success: true };
-      }
-      if (data?.error) {
-        lastError = data.error;
+        isDeleted = true;
+        break;
       }
     } catch (e: any) {
-      if (e?.message) lastError = e.message;
+      console.warn(`[API] Package delete attempt failed on ${url}:`, e?.message);
     }
   }
-  throw new Error(lastError);
+
+  // 2. Direct Supabase Client Delete
+  try {
+    const { deletePackageFromSupabase } = await import('./supabase');
+    await deletePackageFromSupabase(id);
+    isDeleted = true;
+  } catch (sbErr: any) {
+    console.warn('[API] Direct Supabase package delete note:', sbErr?.message || sbErr);
+  }
+
+  if (!isDeleted) {
+    throw new Error('Failed to delete package from database.');
+  }
+
+  console.log('[API] Package successfully deleted from Supabase:', id);
+  return { success: true, id };
 }
 
 // Backup and Restore
 export async function downloadAdminBackup() {
   const res = await fetch(`${API_BASE}/admin/backup/export`, {
     headers: getAuthHeaders(),
+    credentials: 'include',
   });
   if (!res.ok) throw new Error('Failed to download backup');
   const blob = await res.blob();
@@ -839,6 +1134,7 @@ export async function createAdminSnapshot() {
       const res = await fetch(url, {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) return await res.json();
     } catch (e) {}
@@ -856,6 +1152,7 @@ export async function fetchAdminSnapshots() {
     try {
       const res = await fetch(url, {
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) return await res.json();
     } catch (e) {
@@ -879,6 +1176,7 @@ export async function restoreAdminBackup(options: { filename?: string; backupPay
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
+        credentials: 'include',
         body: JSON.stringify(options),
       });
       if (res.ok) return await res.json();
@@ -898,6 +1196,7 @@ export async function deleteAdminSnapshot(filename: string) {
       const res = await fetch(url, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
       if (res.ok) return await res.json();
     } catch (e) {}
@@ -913,7 +1212,7 @@ export async function fetchSecurityStats() {
   ];
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, { headers: getAuthHeaders() });
+      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
       if (res.ok) return await res.json();
     } catch (e) {}
   }
@@ -927,7 +1226,7 @@ export async function fetchSecurityLogs(limit: number = 50) {
   ];
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, { headers: getAuthHeaders() });
+      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
       if (res.ok) return await res.json();
     } catch (e) {}
   }
@@ -941,7 +1240,7 @@ export async function fetchSecurityConfig() {
   ];
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, { headers: getAuthHeaders() });
+      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
       if (res.ok) return await res.json();
     } catch (e) {}
   }
@@ -958,6 +1257,7 @@ export async function updateSecurityConfig(config: any) {
       const res = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(config),
       });
       if (res.ok) return await res.json();
@@ -1070,5 +1370,203 @@ export async function verifySecurityChallenge(nonce: string, timestamp: number, 
   if (!res.ok) throw new Error('Challenge verification failed');
   return res.json();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contact & Customer Support APIs
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ContactMessagePayload {
+  name: string;
+  email: string;
+  phone?: string;
+  telegram?: string;
+  subject: string;
+  message: string;
+  txnId?: string;
+}
+
+export interface ContactMessageItem {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  telegram?: string | null;
+  subject: string;
+  message: string;
+  txnId?: string | null;
+  status: 'PENDING' | 'IN_PROGRESS' | 'RESOLVED' | string;
+  reply?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Submit customer contact / support ticket
+ */
+export async function submitContactMessage(payload: ContactMessagePayload) {
+  const endpoints = [
+    `${API_BASE}/contact`,
+    'http://localhost:5001/api/contact',
+  ];
+
+  let lastError: any = null;
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        return data;
+      }
+      lastError = new Error(data.error || 'Failed to submit contact message');
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  // Fallback to direct Supabase client insertion if backend unreachable
+  try {
+    const { submitContactMessageSupabase } = await import('./supabase');
+    const directData = await submitContactMessageSupabase(payload);
+    return {
+      success: true,
+      message: 'Your message has been submitted directly to support.',
+      ticketId: directData.id,
+      data: directData,
+    };
+  } catch (supabaseErr: any) {
+    console.error('Supabase fallback error:', supabaseErr);
+  }
+
+  throw lastError || new Error('Failed to send contact message');
+}
+
+/**
+ * Fetch ticket status by ID
+ */
+export async function fetchContactTicket(ticketId: string) {
+  const endpoints = [
+    `${API_BASE}/contact/ticket/${ticketId}`,
+    `http://localhost:5001/api/contact/ticket/${ticketId}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+  throw new Error('Support ticket not found');
+}
+
+/**
+ * Fetch contact messages for admin dashboard
+ */
+export async function fetchAdminContactMessages(params?: {
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{
+  messages: ContactMessageItem[];
+  total: number;
+  pendingCount: number;
+  page: number;
+  totalPages: number;
+}> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.search) query.set('search', params.search);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+
+  const endpoints = [
+    `${API_BASE}/admin/contact?${query.toString()}`,
+    `http://localhost:5001/api/admin/contact?${query.toString()}`,
+  ];
+
+  // Direct Supabase Fallback (single source of truth)
+  try {
+    const { getSupabaseClient } = await import('./supabase');
+    const client = getSupabaseClient();
+    const { data: sbMsgs } = await client
+      .from('ContactMessage')
+      .select('*')
+      .order('createdAt', { ascending: false });
+
+    if (Array.isArray(sbMsgs)) {
+      return {
+        messages: sbMsgs,
+        total: sbMsgs.length,
+        pendingCount: sbMsgs.filter((m: any) => m.status === 'PENDING').length,
+        page: 1,
+        totalPages: 1,
+      };
+    }
+  } catch (sbErr) {
+    console.warn('[API] Supabase contact messages direct fetch warning:', sbErr);
+  }
+
+  return {
+    messages: [],
+    total: 0,
+    pendingCount: 0,
+    page: 1,
+    totalPages: 1,
+  };
+}
+
+/**
+ * Update contact message status & admin reply
+ */
+export async function updateAdminContactMessage(
+  id: string,
+  data: { status?: string; reply?: string }
+) {
+  const endpoints = [
+    `${API_BASE}/admin/contact/${id}`,
+    `http://localhost:5001/api/admin/contact/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+
+  throw new Error('Failed to update contact message');
+}
+
+/**
+ * Delete a contact message
+ */
+export async function deleteAdminContactMessage(id: string) {
+  const endpoints = [
+    `${API_BASE}/admin/contact/${id}`,
+    `http://localhost:5001/api/admin/contact/${id}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {}
+  }
+
+  throw new Error('Failed to delete contact message');
+}
+
 
 

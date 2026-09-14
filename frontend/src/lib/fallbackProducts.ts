@@ -32,9 +32,23 @@ function makePackages(productId: string, slug: string, currency: string): GamePa
 }
 
 const RAW_CATALOG: GameItemDef[] = [
+  { name: 'FREE FIRE | KHMER', slug: 'free-fire-khmer', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/freefire.png' },
+  { name: 'MOBILE LEGENDS | KHMER', slug: 'mobile-legends-khmer', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/mlbb.png' },
+  { name: 'MOBILE LEGENDS | PHILIPPINES', slug: 'mobile-legends-philippines', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/mlbb.png' },
+  { name: 'MOBILE LEGENDS | INDONESIA', slug: 'mobile-legends-indonesia', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/mlbb.png' },
+  { name: 'FREE FIRE | INDONESIA', slug: 'free-fire-indonesia', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/freefire.png' },
+  { name: 'FREE FIRE | VIETNAM', slug: 'free-fire-vietnam', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/freefire.png' },
+  { name: 'FREE FIRE | TAIWAN', slug: 'free-fire-taiwan', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/freefire.png' },
+  { name: 'MAGIC CHESS GOGO', slug: 'magic-chess-gogo', category: 'MOBILE_GAME', currency: 'Gold Coins', image: '/images/games/magicchess.png' },
+  { name: 'HONOR OF KINGS', slug: 'honor-of-kings', category: 'MOBILE_GAME', currency: 'Tokens', image: '/images/games/hok.png' },
+  { name: 'PUBG MOBILE', slug: 'pubg-mobile', category: 'MOBILE_GAME', currency: 'UC', image: '/images/games/pubgm.png' },
+  { name: 'BLOOD STRIKE', slug: 'blood-strike', category: 'MOBILE_GAME', currency: 'Gold', image: '/images/games/bloodstrike.png' },
+  { name: 'VALORANT', slug: 'valorant', category: 'PC_GAME', currency: 'VP', image: '/images/games/valorant.png' },
+  { name: 'FARLIGHT 84', slug: 'farlight-84', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/farlight.png' },
+  { name: 'DELTA FORCE', slug: 'delta-force', category: 'PC_GAME', currency: 'Delta Coins', image: '/images/games/deltaforce.png' },
+  { name: 'SUPER SUS', slug: 'super-sus', category: 'MOBILE_GAME', currency: 'Goldstar', image: '/images/games/roblox.png' },
   { name: 'Free Fire', slug: 'free-fire', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/freefire.png' },
   { name: 'Mobile Legends: Bang Bang', slug: 'mobile-legends', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/mlbb.png' },
-  { name: 'Moonton Mobile Legends', slug: 'moonton-mlbb', category: 'MOBILE_GAME', currency: 'Diamonds', image: '/images/games/mlbb.png' },
 ];
 
 export const FALLBACK_PRODUCTS: GameProduct[] = RAW_CATALOG.map((item, idx) => {
