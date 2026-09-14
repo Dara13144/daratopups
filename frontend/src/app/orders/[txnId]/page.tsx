@@ -426,10 +426,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                             alt="KHQR Code"
                             className="w-40 h-40 min-[360px]:w-48 min-[360px]:h-48 rounded-lg object-contain select-none"
                           />
-                          {/* Floating central black circle with white $ sign and pulsing ring */}
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-slate-950 flex items-center justify-center shadow-xl border-2 border-white select-none font-sans ring-4 ring-[#e51821]/20 animate-pulse">
-                            <span className="text-white font-black text-sm sm:text-base font-sans">$</span>
-                          </div>
                         </div>
                       </div>
 
