@@ -12,6 +12,11 @@ export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeM
   const [verifying, setVerifying] = useState(true);
   const [statusText, setStatusText] = useState('Checking your browser security before accessing NA-DY TOPUP...');
   const [error, setError] = useState('');
+  const [rayId, setRayId] = useState('NADY-SHIELD-SECURE');
+
+  useEffect(() => {
+    setRayId(`NADY-SHIELD-${Date.now().toString(36).toUpperCase()}`);
+  }, []);
 
   const solveChallenge = async () => {
     setVerifying(true);
@@ -112,7 +117,7 @@ export default function SecurityChallengeModal({ onSuccess }: SecurityChallengeM
         )}
 
         <div className="text-[10px] text-slate-500">
-          Ray ID: <span className="font-mono text-slate-400">NADY-SHIELD-{Date.now().toString(36).toUpperCase()}</span> • Protected by NA-DY TOPUP
+          Ray ID: <span className="font-mono text-slate-400">{rayId}</span> • Protected by NA-DY TOPUP
         </div>
       </div>
     </div>

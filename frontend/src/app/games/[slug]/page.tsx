@@ -191,6 +191,17 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     params.then((p) => setSlug(p.slug));
   }, [params]);
 
+  // Read URL searchParams on mount (e.g. redirected from Check ID Modal or Reseller)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const qPlayerId = sp.get('playerId') || sp.get('id') || '';
+      const qZoneId = sp.get('playerZoneId') || sp.get('zoneId') || sp.get('zone') || sp.get('server') || '';
+      if (qPlayerId) setPlayerId(qPlayerId);
+      if (qZoneId) setPlayerZoneId(qZoneId.replace(/[()]/g, '').trim());
+    }
+  }, []);
+
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
@@ -447,14 +458,23 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 <div>
                   <label className="block text-slate-300 text-xs font-bold mb-1.5 flex items-center justify-between">
                     <span>{t.playerId}</span>
-                    <span className="text-[10px] text-slate-500 font-normal">e.g. 12345678</span>
+                    <span className="text-[10px] text-slate-500 font-normal">e.g. 1523754961</span>
                   </label>
                   <input
                     type="text"
                     required
                     placeholder={t.playerId}
                     value={playerId}
-                    onChange={(e) => setPlayerId(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const comboMatch = val.match(/^(\d{4,12})[\s_()\-]+(\d{3,6})\)?$/);
+                      if (comboMatch && zoneConfig.hasZone) {
+                        setPlayerId(comboMatch[1]);
+                        setPlayerZoneId(comboMatch[2]);
+                        return;
+                      }
+                      setPlayerId(val);
+                    }}
                     className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                   />
                 </div>
@@ -463,13 +483,13 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                   <div>
                     <label className="block text-slate-300 text-xs font-bold mb-1.5 flex items-center justify-between">
                       <span>{zoneConfig.label || t.zoneId}</span>
-                      <span className="text-[10px] text-slate-500 font-normal">{zoneConfig.placeholder}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">e.g. (11766)</span>
                     </label>
                     <input
                       type="text"
                       placeholder={zoneConfig.placeholder}
                       value={playerZoneId}
-                      onChange={(e) => setPlayerZoneId(e.target.value)}
+                      onChange={(e) => setPlayerZoneId(e.target.value.replace(/[()]/g, ''))}
                       className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                     />
                     {zoneConfig.isServer && zoneConfig.serverOptions && (
@@ -515,13 +535,68 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 )}
               </div>
 
+              {/* Free Fire Quick Presets */}
+              {(!zoneConfig.hasZone && (slug.includes('free-fire') || slug.includes('freefire'))) && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                    <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    <span>Free Fire UID Check</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-semibold">គំរូសាកល្បង:</span>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerId('11676873799')}
+                      className="px-2 py-0.5 rounded-md bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/40 text-amber-300 text-[10px] font-mono cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                      <span>11676873799 (Darazzzzz1k)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlayerId('12345678')}
+                      className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono cursor-pointer"
+                    >
+                      12345678
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {zoneConfig.hasZone && (
                 <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-2">
                     <span className="flex items-center gap-1.5 text-cyan-300">
                       <Zap className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                       <span>{zoneConfig.hint || 'សូមបញ្ចូល User ID និង Zone ID ត្រឹមត្រូវ'}</span>
                     </span>
+
+                    {(slug.includes('mobile-legend') || slug.includes('mlbb')) && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 font-semibold">គំរូ:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPlayerId('1523754961');
+                            setPlayerZoneId('11766');
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                          <span>1523754961 (11766)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPlayerId('12345678');
+                            setPlayerZoneId('1234');
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono cursor-pointer"
+                        >
+                          12345678 (1234)
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <button

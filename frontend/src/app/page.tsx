@@ -10,6 +10,7 @@ import { subscribeToProductsRealtime, subscribeToAllRealtime } from '../lib/supa
 import { AlertCircle, Gamepad2, Search, X, Sparkles, ChevronRight, ChevronLeft, Flame } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
+import CheckIdModal from '../components/CheckIdModal';
 
 const BANNERS = [
   {
@@ -28,6 +29,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const [checkIdModalOpen, setCheckIdModalOpen] = useState(false);
   const { t } = useLanguage();
 
   // Auto slide banner with smooth animation every 4.5 seconds
@@ -177,6 +179,21 @@ export default function Home() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Quick Check ID Feature Callout */}
+          <div className="flex items-center justify-center gap-2.5 mt-3 text-xs">
+            <button
+              type="button"
+              onClick={() => setCheckIdModalOpen(true)}
+              className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 hover:from-cyan-500/30 hover:to-purple-500/30 border border-cyan-500/40 text-cyan-300 font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/10 transition-all cursor-pointer group"
+            >
+              <Sparkles className="h-4 w-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
+              <span>🔍 ពិនិត្យ ID & ឈ្មោះពិត MLBB & Free Fire (Live ID Check)</span>
+              <span className="text-[10px] bg-cyan-500 text-slate-950 px-2 py-0.5 rounded-full font-black">
+                ឥតគិតថ្លៃ
+              </span>
+            </button>
           </div>
         </div>
 
@@ -379,6 +396,11 @@ export default function Home() {
           )}
         </div>
       </main>
+
+      <CheckIdModal
+        isOpen={checkIdModalOpen}
+        onClose={() => setCheckIdModalOpen(false)}
+      />
 
       <Footer />
     </>

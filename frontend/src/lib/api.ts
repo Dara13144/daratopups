@@ -321,13 +321,67 @@ export async function lookupPlayerProfile(
   playerId: string,
   playerZoneId?: string
 ): Promise<PlayerProfile> {
-  const cleanId = playerId.trim();
-  const cleanZone = playerZoneId ? playerZoneId.trim() : '';
+  let cleanId = (playerId || '').trim();
+  let cleanZone = (playerZoneId || '').trim();
+
+  // Intelligent combined ID/Zone parsing (e.g. "1523754961 (11766)", "1523754961(11766)", "1523754961 11766")
+  const comboMatch = cleanId.match(/^(\d{4,12})[\s_()\-]+(\d{3,6})\)?$/);
+  if (comboMatch) {
+    cleanId = comboMatch[1];
+    if (!cleanZone) {
+      cleanZone = comboMatch[2];
+    }
+  }
+
+  // Strip parentheses and spaces
+  if (cleanZone) {
+    cleanZone = cleanZone.replace(/[()]/g, '').trim();
+  }
+
+  const isMLBB = gameSlug.includes('mobile-legend') || gameSlug.includes('mlbb') || gameSlug.includes('moonton');
+  if (isMLBB) {
+    cleanId = cleanId.replace(/[^\d]/g, '');
+    cleanZone = cleanZone.replace(/[^\d]/g, '');
+  }
 
   if (!cleanId || cleanId.length < 3) {
     throw new Error('Player ID must be at least 3 characters');
   }
 
+  // 1. Try local Next.js Route Handler first for instant, zero-delay verification
+  if (typeof window !== 'undefined') {
+    try {
+      const q = new URLSearchParams({ gameSlug, playerId: cleanId });
+      if (cleanZone) q.append('playerZoneId', cleanZone);
+
+      const ctrl = new AbortController();
+      const tm = setTimeout(() => ctrl.abort(), 4000);
+      const localRes = await fetch(`/api/lookup?${q.toString()}`, { signal: ctrl.signal });
+      clearTimeout(tm);
+
+      const localData = await localRes.json().catch(() => null);
+      if (localRes.ok && localData && localData.success && localData.nickname) {
+        return {
+          success: true,
+          nickname: localData.nickname,
+          playerId: localData.playerId || cleanId,
+          playerZoneId: localData.playerZoneId || (cleanZone || undefined),
+          region: localData.region || 'Cambodia (Asia)',
+          level: localData.level || 45,
+          avatarUrl: localData.avatarUrl || `/images/games/${gameSlug}.png`,
+        };
+      }
+      if (localData && localData.success === false && localData.error) {
+        throw new Error(localData.error);
+      }
+    } catch (err: any) {
+      if (err.message && !err.message.includes('fetch') && !err.message.includes('network') && !err.message.includes('abort')) {
+        throw err;
+      }
+    }
+  }
+
+  // 2. Try Backend API as robust secondary provider
   try {
     const query = new URLSearchParams({ playerId: cleanId });
     if (cleanZone) query.append('playerZoneId', cleanZone);
@@ -346,8 +400,8 @@ export async function lookupPlayerProfile(
       return {
         success: true,
         nickname: data.nickname,
-        playerId: cleanId,
-        playerZoneId: cleanZone || undefined,
+        playerId: data.playerId || cleanId,
+        playerZoneId: data.playerZoneId || (cleanZone || undefined),
         region: data.region || 'Cambodia (Asia)',
         level: data.level || 45,
         avatarUrl: data.avatarUrl || `/images/games/${gameSlug}.png`,

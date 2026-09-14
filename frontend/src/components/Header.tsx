@@ -11,6 +11,7 @@ import {
 import { useLanguage } from '../lib/LanguageContext';
 import Image from 'next/image';
 import AnnouncementTicker from './AnnouncementTicker';
+import CheckIdModal from './CheckIdModal';
 import { fetchProducts, GameProduct } from '../lib/api';
 import { subscribeToProductsRealtime } from '../lib/supabase';
 
@@ -32,6 +33,7 @@ export default function Header() {
   const [creatorModalOpen, setCreatorModalOpen] = useState(false);
   const [faqModalOpen, setFaqModalOpen] = useState(false);
   const [updatesModalOpen, setUpdatesModalOpen] = useState(false);
+  const [checkIdModalOpen, setCheckIdModalOpen] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
 
   // Load games for smart search
@@ -213,10 +215,20 @@ export default function Header() {
                 <Search className="h-3.5 w-3.5 text-slate-400 ml-0.5" />
               </button>
 
+              {/* 🔍 Check ID Button */}
+              <button
+                type="button"
+                onClick={() => setCheckIdModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-full bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 hover:text-white font-bold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer text-xs"
+              >
+                <Search className="h-3.5 w-3.5 text-cyan-400" />
+                <span>ពិនិត្យ ID</span>
+              </button>
+
               {/* Quick Track Button */}
               <Link
                 href="/history"
-                className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-slate-200 hover:text-white font-bold transition-colors"
+                className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-slate-200 hover:text-white font-bold transition-colors text-xs"
               >
                 តាមដាន
               </Link>
@@ -224,7 +236,7 @@ export default function Header() {
               {/* ⚡ TOP UP White Pill Button */}
               <Link
                 href="/#catalog"
-                className="px-4 py-1.5 rounded-full bg-white hover:bg-slate-200 text-slate-950 font-black flex items-center space-x-1 shadow-md transition-all active:scale-95"
+                className="px-4 py-1.5 rounded-full bg-white hover:bg-slate-200 text-slate-950 font-black flex items-center space-x-1 shadow-md transition-all active:scale-95 text-xs"
               >
                 <Zap className="h-3.5 w-3.5 fill-current text-slate-950" />
                 <span>TOP UP</span>
@@ -234,7 +246,7 @@ export default function Header() {
               {mounted && isAdmin && (
                 <Link
                   href="/admin"
-                  className="px-3.5 py-1.5 rounded-full bg-violet-950/80 border border-violet-500/40 text-violet-400 hover:bg-violet-900/60 transition-all font-bold flex items-center space-x-1"
+                  className="px-3.5 py-1.5 rounded-full bg-violet-950/80 border border-violet-500/40 text-violet-400 hover:bg-violet-900/60 transition-all font-bold flex items-center space-x-1 text-xs"
                 >
                   <LayoutDashboard className="h-3.5 w-3.5" />
                   <span>Admin</span>
@@ -244,6 +256,18 @@ export default function Header() {
 
             {/* Right Quick Section for Mobile / Tablet */}
             <div className="flex items-center space-x-1.5 lg:hidden">
+              {/* Check ID on mobile */}
+              <button
+                type="button"
+                onClick={() => setCheckIdModalOpen(true)}
+                className="p-2 rounded-xl bg-cyan-950/60 text-cyan-300 hover:text-white border border-cyan-500/40 flex items-center gap-1"
+                aria-label="Check ID"
+                title="Check ID Mobile Legends & Free Fire"
+              >
+                <Search className="h-4 w-4 text-cyan-400" />
+                <span className="text-[11px] font-bold hidden sm:inline">ពិនិត្យ ID</span>
+              </button>
+
               {/* Smart Search on mobile */}
               <button
                 type="button"
@@ -672,6 +696,23 @@ export default function Header() {
                 type="button"
                 onClick={() => {
                   setMobileMenuOpen(false);
+                  setCheckIdModalOpen(true);
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all text-left cursor-pointer"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-amber-400 font-black">🔍</span>
+                  <span>ពិនិត្យ ID ហ្គេម (MLBB & Free Fire)</span>
+                </div>
+                <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-xs">
+                  ឥតគិតថ្លៃ
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
                   setFaqModalOpen(true);
                 }}
                 className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all text-left cursor-pointer"
@@ -748,6 +789,12 @@ export default function Header() {
           </div>
         </div>
       )}
+
+      {/* Global Check ID Modal */}
+      <CheckIdModal
+        isOpen={checkIdModalOpen}
+        onClose={() => setCheckIdModalOpen(false)}
+      />
     </>
   );
 }
