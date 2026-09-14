@@ -53,6 +53,8 @@ export default function AdminDashboard() {
   const [autoSeedPackages, setAutoSeedPackages] = useState(true);
   const [newProductCategory, setNewProductCategory] = useState('MOBILE_GAME');
   const [newProductImage, setNewProductImage] = useState('');
+  const [newProductHasZone, setNewProductHasZone] = useState(false);
+  const [newProductZoneLabel, setNewProductZoneLabel] = useState('Zone ID');
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
   const [productImagePreview, setProductImagePreview] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -93,6 +95,8 @@ export default function AdminDashboard() {
   const [editProdSlug, setEditProdSlug] = useState('');
   const [editProdImage, setEditProdImage] = useState('');
   const [editProdIsActive, setEditProdIsActive] = useState(true);
+  const [editProdHasZone, setEditProdHasZone] = useState(false);
+  const [editProdZoneLabel, setEditProdZoneLabel] = useState('Zone ID');
   const [editProdModalFile, setEditProdModalFile] = useState<File | null>(null);
   const [editProdModalPreview, setEditProdModalPreview] = useState('');
   const editProdModalFileInputRef = useRef<HTMLInputElement>(null);
@@ -173,6 +177,8 @@ export default function AdminDashboard() {
     setEditProdSlug(prod.slug);
     setEditProdImage(prod.image);
     setEditProdIsActive(prod.isActive !== false);
+    setEditProdHasZone(!!prod.hasZoneId);
+    setEditProdZoneLabel(prod.zoneIdLabel || 'Zone ID');
     setEditProdModalFile(null);
     setEditProdModalPreview('');
   };
@@ -192,6 +198,8 @@ export default function AdminDashboard() {
         slug: editProdSlug,
         image: finalImg,
         isActive: editProdIsActive,
+        hasZoneId: editProdHasZone,
+        zoneIdLabel: editProdHasZone ? editProdZoneLabel : null,
       });
       setSuccess(`Product "${editProdName}" updated successfully!`);
       setEditingProductModal(null);
@@ -693,12 +701,15 @@ export default function AdminDashboard() {
         imageUrl || undefined,
         newProductSlug.trim() || undefined,
         undefined,
-        autoSeedPackages
+        autoSeedPackages,
+        newProductHasZone,
+        newProductHasZone ? newProductZoneLabel : undefined
       );
       const createdProd = res.product;
       const gameTitle = createdProd?.name || newProductName;
       setSuccess(`Game "${gameTitle}" created successfully with ${createdProd?.packages?.length || 6} top-up packages!`);
       setNewProductName(''); setNewProductSlug(''); setNewProductImage(''); setProductImageFile(null); setProductImagePreview('');
+      setNewProductHasZone(false); setNewProductZoneLabel('Zone ID');
       await loadAllData();
       if (createdProd?.id) {
         setSelectedProductId(createdProd.id);
@@ -1082,7 +1093,10 @@ export default function AdminDashboard() {
                           {recentOrders.map((o: any, idx: number) => (
                             <tr key={`ro-${o.id || idx}-${idx}`} className="hover:bg-slate-800/20">
                               <td className="py-2.5 pr-4 text-white font-semibold">{o.package?.product?.name||'—'}</td>
-                              <td className="py-2.5 pr-4 text-slate-300">{o.playerNickname||o.playerId}</td>
+                              <td className="py-2.5 pr-4 text-slate-300">
+                                <div>{o.playerNickname||o.playerId}</div>
+                                {o.playerZoneId && <span className="text-cyan-400 font-mono text-[10px]">({o.playerZoneId})</span>}
+                              </td>
                               <td className="py-2.5 pr-4 text-cyan-400 font-bold">${o.price.toFixed(2)}</td>
                               <td className="py-2.5">{getStatusBadge(o.status)}</td>
                             </tr>
@@ -1174,7 +1188,17 @@ export default function AdminDashboard() {
                             <tr className="hover:bg-slate-800/20">
                               <td className="px-4 py-3 font-mono text-slate-400 text-[10px] whitespace-nowrap">{o.paymentTxnId?.slice(0,18)}…</td>
                               <td className="px-4 py-3"><div className="text-white font-semibold whitespace-nowrap">{o.package?.product?.name}</div><div className="text-slate-500 text-[10px]">{o.package?.name}</div></td>
-                              <td className="px-4 py-3"><div className="text-slate-200 whitespace-nowrap">{o.playerNickname||'—'}</div><div className="text-slate-500 font-mono text-[10px]">{o.playerId}</div></td>
+                              <td className="px-4 py-3">
+                                <div className="text-slate-200 whitespace-nowrap">{o.playerNickname||'—'}</div>
+                                <div className="text-slate-400 font-mono text-[10px] flex items-center gap-1 flex-wrap">
+                                  <span>{o.playerId}</span>
+                                  {o.playerZoneId && (
+                                    <span className="text-cyan-400 font-sans font-bold text-[9px] px-1 py-0.2 rounded bg-cyan-950/60 border border-cyan-500/20">
+                                      Zone: {o.playerZoneId}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
                               <td className="px-4 py-3 text-cyan-400 font-bold whitespace-nowrap">${o.price.toFixed(2)}</td>
                               <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{o.paymentMethod}</td>
                               <td className="px-4 py-3">{getStatusBadge(o.status)}</td>
@@ -1303,6 +1327,35 @@ export default function AdminDashboard() {
                           <span className="font-bold text-white block">Auto-generate 6 Starter Top-Up Packages</span>
                           <span className="text-[11px] text-slate-400">Creates 50, 100, 250, 500, 1000, and 2000 Diamonds packages so top-ups work immediately.</span>
                         </label>
+                      </div>
+
+                      {/* Zone ID / Server ID Requirement Toggle */}
+                      <div className="rounded-xl p-3 bg-slate-950/70 border border-slate-800 space-y-2">
+                        <div className="flex items-start space-x-2.5">
+                          <input
+                            id="newProductHasZoneCheck"
+                            type="checkbox"
+                            checked={newProductHasZone}
+                            onChange={e => setNewProductHasZone(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                          />
+                          <label htmlFor="newProductHasZoneCheck" className="text-xs text-slate-300 cursor-pointer">
+                            <span className="font-bold text-white block">Requires Zone ID / Server ID (ទាមទារ Zone/Server ID)</span>
+                            <span className="text-[11px] text-slate-400">Enable this for games like Mobile Legends (Zone ID) or Genshin Impact (Server ID).</span>
+                          </label>
+                        </div>
+                        {newProductHasZone && (
+                          <div className="pt-2 border-t border-slate-800">
+                            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Field Label / ឈ្មោះ Label</label>
+                            <input
+                              type="text"
+                              value={newProductZoneLabel}
+                              onChange={e => setNewProductZoneLabel(e.target.value)}
+                              placeholder="e.g. Zone ID, Server ID, Server"
+                              className={inputCls}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       {/* Drag & Drop Artwork */}
@@ -2167,6 +2220,37 @@ export default function AdminDashboard() {
                       >
                         {editProdIsActive ? 'Active (Visible)' : 'Disabled (Hidden)'}
                       </button>
+                    </div>
+
+                    {/* Zone ID / Server ID Toggle */}
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-white">Requires Zone ID / Server ID</p>
+                          <p className="text-[10px] text-slate-400">Customer must enter Zone/Server ID</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditProdHasZone(!editProdHasZone)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            editProdHasZone ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {editProdHasZone ? 'Required (Yes)' : 'Not Required (No)'}
+                        </button>
+                      </div>
+                      {editProdHasZone && (
+                        <div className="pt-2 border-t border-slate-800">
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">Field Label / ឈ្មោះ Label (e.g. Zone ID, Server ID)</label>
+                          <input
+                            type="text"
+                            value={editProdZoneLabel}
+                            onChange={e => setEditProdZoneLabel(e.target.value)}
+                            placeholder="e.g. Zone ID, Server ID, Server"
+                            className={inputCls}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Submit Actions */}

@@ -10,6 +10,7 @@ import { subscribeToAllRealtime } from '../../../lib/supabase';
 import { Gamepad2, ArrowLeft, ShieldAlert, CheckCircle, CreditCard, ShoppingCart, ShieldCheck, Gem, X, Layers, Sparkles, UserCheck, Send, Search, RefreshCw, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
+import { getGameZoneConfig } from '../../../lib/gameConfig';
 
 // --- PREMIUM SVG GRAPHICS FOR RECHARGE PACKAGES (MATCHING USER SCREENSHOTS) ---
 const PinkDiamondIcon = () => (
@@ -234,6 +235,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     };
   }, [slug, product?.id]);
 
+  const zoneConfig = getGameZoneConfig(product);
+
   // Dedicated Check Name Action
   const handlePerformCheckName = async () => {
     const cleanId = playerId.trim();
@@ -241,9 +244,8 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       setCheckNameError('សូមបញ្ចូល Player ID យ៉ាងតិច 3 ខ្ទង់ (Please enter a valid Player ID)');
       return;
     }
-    const isMLBB = slug === 'mobile-legends' || slug === 'moonton-mlbb' || slug.startsWith('mobile-legends-');
-    if (isMLBB && (!playerZoneId.trim() || playerZoneId.trim().length < 3)) {
-      setCheckNameError('សូមបញ្ចូល Zone ID (Please enter Zone ID)');
+    if (zoneConfig.required && (!playerZoneId.trim() || playerZoneId.trim().length < (zoneConfig.isServer ? 2 : 3))) {
+      setCheckNameError(`សូមបញ្ចូល ${zoneConfig.label || 'Zone ID'} (Please enter ${zoneConfig.label || 'Zone ID'})`);
       return;
     }
 
@@ -272,8 +274,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
       return;
     }
 
-    const isMLBB = slug === 'mobile-legends' || slug === 'moonton-mlbb' || slug.startsWith('mobile-legends-');
-    if (isMLBB && (!playerZoneId.trim() || playerZoneId.trim().length < 3)) {
+    if (zoneConfig.required && (!playerZoneId.trim() || playerZoneId.trim().length < (zoneConfig.isServer ? 2 : 3))) {
       setAutoNickname('');
       setPlayerProfile(null);
       setCheckingName(false);
@@ -297,16 +298,15 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [playerId, playerZoneId, slug]);
+  }, [playerId, playerZoneId, slug, zoneConfig.required, zoneConfig.isServer]);
 
   const handleOrderSubmit = async () => {
     if (!playerId) {
       setError(t.nicknameRequired);
       return;
     }
-    const isMLBB = slug === 'mobile-legends' || slug.startsWith('mobile-legends-');
-    if (isMLBB && !playerZoneId) {
-      setError(t.zoneIdRequired);
+    if (zoneConfig.required && !playerZoneId.trim()) {
+      setError(`សូមបញ្ចូល ${zoneConfig.label || 'Zone ID'} (${zoneConfig.label || 'Zone ID'} is required)`);
       return;
     }
     if (!selectedPackage) {
@@ -459,19 +459,37 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                   />
                 </div>
 
-                {(product.slug === 'mobile-legends' || product.slug === 'moonton-mlbb' || product.slug.startsWith('mobile-legends-')) ? (
+                {zoneConfig.hasZone ? (
                   <div>
                     <label className="block text-slate-300 text-xs font-bold mb-1.5 flex items-center justify-between">
-                      <span>{t.zoneId}</span>
-                      <span className="text-[10px] text-slate-500 font-normal">e.g. 1234</span>
+                      <span>{zoneConfig.label || t.zoneId}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">{zoneConfig.placeholder}</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. 1234"
+                      placeholder={zoneConfig.placeholder}
                       value={playerZoneId}
                       onChange={(e) => setPlayerZoneId(e.target.value)}
                       className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm sm:text-base text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[44px]"
                     />
+                    {zoneConfig.isServer && zoneConfig.serverOptions && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {zoneConfig.serverOptions.map((srv) => (
+                          <button
+                            key={srv}
+                            type="button"
+                            onClick={() => setPlayerZoneId(srv)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              playerZoneId.toLowerCase() === srv.toLowerCase()
+                                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                                : 'bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                            }`}
+                          >
+                            {srv}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-end">
@@ -497,12 +515,12 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                 )}
               </div>
 
-              {(product.slug === 'mobile-legends' || product.slug === 'moonton-mlbb' || product.slug.startsWith('mobile-legends-')) && (
+              {zoneConfig.hasZone && (
                 <div className="mt-3">
                   <button
                     type="button"
                     onClick={handlePerformCheckName}
-                    disabled={checkingName || !playerId.trim() || !playerZoneId.trim()}
+                    disabled={checkingName || !playerId.trim() || (zoneConfig.required && !playerZoneId.trim())}
                     className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all disabled:opacity-40 cursor-pointer min-h-[40px]"
                   >
                     {checkingName ? (
@@ -564,7 +582,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                             <span>Verified Player</span>
                           </span>
                           <span className="text-[10px] text-slate-400 font-mono">
-                            ID: {playerId}{playerZoneId ? ` (${playerZoneId})` : ''}
+                            ID: {playerId}{playerZoneId ? ` (${zoneConfig.isServer ? 'Server' : 'Zone'}: ${playerZoneId})` : ''}
                           </span>
                         </div>
 

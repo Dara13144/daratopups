@@ -230,15 +230,25 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     let y = 250;
     const lineHeight = 38;
 
-    const rows = [
+    const isServer = (order.gameSlug || '').includes('genshin') || (order.gameSlug || '').includes('star-rail') || (order.gameSlug || '').includes('zenless') || (order.gameSlug || '').includes('wuthering');
+    const zoneLabel = isServer ? 'Server ID:' : 'Zone ID:';
+
+    const rows: [string, string][] = [
       ['Product:', `${order.gameName} - ${order.packageName}`],
       ['User ID:', order.playerId],
+    ];
+
+    if (order.playerZoneId) {
+      rows.push([zoneLabel, order.playerZoneId]);
+    }
+
+    rows.push(
       ['Nickname:', order.playerNickname || 'Verified Account'],
       ['Payment:', order.paymentMethod || 'KHQR'],
       ['Price:', `${order.price.toFixed(2)} USD`],
       ['Transaction ID:', order.paymentTxnId],
-      ['Date:', new Date(order.createdAt).toLocaleString()],
-    ];
+      ['Date:', new Date(order.createdAt).toLocaleString()]
+    );
 
     rows.forEach(([label, value]) => {
       // Row line
@@ -525,6 +535,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                       <span className="text-slate-400">{t.recipientPlayerId}:</span>
                       <strong className="text-white font-mono">{order.playerId}</strong>
                     </div>
+                    {order.playerZoneId && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">
+                          {(order.gameSlug || '').includes('genshin') || (order.gameSlug || '').includes('star-rail') || (order.gameSlug || '').includes('zenless') || (order.gameSlug || '').includes('wuthering') ? 'Server' : 'Zone ID'}:
+                        </span>
+                        <strong className="text-cyan-400 font-mono font-bold">{order.playerZoneId}</strong>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-slate-400">{t.deliveryStatus}:</span>
                       <span className="text-emerald-400 font-bold">{t.autoDelivered} ✅</span>
@@ -622,6 +640,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                   <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">USER ID</span>
                   <span className="text-white font-mono font-bold select-all">{order.playerId}</span>
                 </div>
+                {order.playerZoneId && (
+                  <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
+                    <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">
+                      {(order.gameSlug || '').includes('genshin') || (order.gameSlug || '').includes('star-rail') || (order.gameSlug || '').includes('zenless') || (order.gameSlug || '').includes('wuthering') ? 'SERVER ID' : 'ZONE ID'}
+                    </span>
+                    <span className="text-cyan-400 font-mono font-bold select-all">{order.playerZoneId}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
                   <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">NICKNAME</span>
                   <span className="text-white font-bold truncate max-w-[190px]">{order.playerNickname || 'N/A'}</span>

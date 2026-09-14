@@ -25,6 +25,8 @@ export interface GameProduct {
   image: string;
   category: string;
   isActive: boolean;
+  hasZoneId?: boolean;
+  zoneIdLabel?: string | null;
   packages: GamePackage[];
 }
 
@@ -91,6 +93,7 @@ export interface OrderStatusDetails {
   gameSlug: string;
   packageName: string;
   playerId: string;
+  playerZoneId?: string | null;
   playerNickname: string;
   price: number;
   status: string;
@@ -760,7 +763,9 @@ export async function addAdminProduct(
   image?: string,
   slug?: string,
   packages?: any[],
-  autoSeedPackages: boolean = true
+  autoSeedPackages: boolean = true,
+  hasZoneId: boolean = false,
+  zoneIdLabel?: string
 ) {
   const endpoints = [
     `${API_BASE}/admin/products`,
@@ -776,7 +781,7 @@ export async function addAdminProduct(
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages }),
+        body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages, hasZoneId, zoneIdLabel }),
       });
       if (res.ok) return await res.json();
       const err = await res.json().catch(() => ({}));
@@ -904,7 +909,7 @@ export async function addAdminPackage(
   throw new Error('Failed to create package');
 }
 
-export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string }) {
+export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string; hasZoneId?: boolean; zoneIdLabel?: string | null }) {
   const cleanId = encodeURIComponent(id.trim());
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const headers: Record<string, string> = {
