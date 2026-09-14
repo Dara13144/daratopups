@@ -32,9 +32,14 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
-  // Safety net: bake the production API URL in at build time even if env var is missing
+  // Safety net: ensure production builds NEVER bake in localhost/127.0.0.1
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://nadybackend.onrender.com',
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL &&
+      !process.env.NEXT_PUBLIC_API_URL.includes('localhost') &&
+      !process.env.NEXT_PUBLIC_API_URL.includes('127.0.0.1')
+        ? process.env.NEXT_PUBLIC_API_URL
+        : 'https://nadybackend.onrender.com',
   },
 
   // Fix turbopack root warning — point to the frontend directory

@@ -8,28 +8,50 @@ const PRODUCTION_API = 'https://nadybackend.onrender.com';
  * 3. In production environment (Vercel, Render, custom domain): https://nadybackend.onrender.com
  */
 export function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const isLocalhost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local');
+
+    // If visiting on a public domain, NEVER call localhost/127.0.0.1
+    // Doing so triggers the Chrome/Edge "Access other apps and services on this device" prompt!
+    if (!isLocalhost) {
+      const envUrl = (
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        (typeof process !== 'undefined' && (process.env as any).VITE_API_URL)
+      );
+
+      if (
+        envUrl &&
+        typeof envUrl === 'string' &&
+        envUrl.trim() &&
+        !envUrl.includes('localhost') &&
+        !envUrl.includes('127.0.0.1') &&
+        !envUrl.includes('0.0.0.0')
+      ) {
+        return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
+      }
+
+      return PRODUCTION_API;
+    }
+  }
+
+  // Local development environment:
   const envUrl = (
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     (typeof process !== 'undefined' && (process.env as any).VITE_API_URL)
   );
 
-  if (envUrl && envUrl.trim()) {
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
     return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 
-  if (typeof window !== 'undefined') {
-    const isLocalhost =
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname === '0.0.0.0';
-
-    if (isLocalhost) {
-      return 'http://localhost:5001';
-    }
-  }
-
-  return PRODUCTION_API;
+  return 'http://localhost:5001';
 }
 
 export const serverUrl = getApiBaseUrl();

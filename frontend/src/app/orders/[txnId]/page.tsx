@@ -322,7 +322,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
 
   if (!order) return null;
 
-  const isKhqr = order.paymentMethod === 'BAKONG' || order.paymentMethod === 'CANADIA';
+  const isKhqr = !order.paymentMethod || order.paymentMethod === 'BAKONG' || order.paymentMethod === 'ABA' || order.paymentMethod === 'CANADIA' || order.paymentMethod === 'KHQR';
 
   return (
     <>
@@ -414,16 +414,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                         <div className="border-b-2 border-dashed border-slate-200 w-full"></div>
                       </div>
 
-                      {/* QR Code Canvas (Clickable to open ABA Mobile directly) with Live Laser Scan Line */}
+                      {/* QR Code Canvas (Clickable to open ABA Mobile directly) */}
                       <div 
                         className="px-4 sm:px-6 py-2 flex justify-center cursor-pointer active:scale-95 transition-transform"
                         onClick={handleOpenAba}
                         title="Tap to open in ABA Mobile"
                       >
                         <div className="relative p-2.5 sm:p-3 bg-white rounded-xl sm:rounded-2xl border border-slate-100 flex items-center justify-center shadow-xs overflow-hidden">
-                          {/* Animated Laser Scanning Line */}
-                          <div className="animate-khqr-scan"></div>
-
                           <img 
                             src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(order.paymentQrCode || order.paymentTxnId)}`}
                             alt="KHQR Code"
