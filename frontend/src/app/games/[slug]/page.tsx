@@ -583,21 +583,26 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-2 flex-wrap">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" />
-                            <span>Verified Player</span>
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-2.5 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1 shadow-sm shadow-emerald-500/10">
+                            <Sparkles className="h-3 w-3 text-emerald-400" />
+                            <span>ផ្ទៀងផ្ទាត់ឈ្មោះពិតជោគជ័យ (Real In-Game Name Verified)</span>
                           </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
+                          <span className="text-[10px] text-slate-400 font-mono bg-slate-950/60 px-2 py-0.5 rounded-md border border-slate-800">
                             ID: {playerId}{playerZoneId ? ` (${zoneConfig.isServer ? 'Server' : 'Zone'}: ${playerZoneId})` : ''}
                           </span>
                         </div>
 
-                        <h4 className="text-white font-black text-sm sm:text-base truncate mt-0.5 tracking-tight text-shadow-sm">
-                          {playerProfile?.nickname || autoNickname}
-                        </h4>
+                        <div className="mt-1">
+                          <div className="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
+                            <span>ឈ្មោះពិតក្នុងហ្គេម (Real Name):</span>
+                          </div>
+                          <h4 className="text-white font-black text-base sm:text-lg truncate tracking-tight text-shadow-sm text-emerald-300">
+                            {playerProfile?.nickname || autoNickname}
+                          </h4>
+                        </div>
 
-                        <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
+                        <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-1">
                           <span className="text-emerald-300 font-semibold">📍 {playerProfile?.region || 'Cambodia (Asia)'}</span>
                           {playerProfile?.level && (
                             <span className="text-cyan-300 font-semibold">⚡ Lv. {playerProfile.level}</span>
