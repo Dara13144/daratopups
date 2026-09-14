@@ -516,12 +516,19 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               </div>
 
               {zoneConfig.hasZone && (
-                <div className="mt-3">
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-2">
+                    <span className="flex items-center gap-1.5 text-cyan-300">
+                      <Zap className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                      <span>{zoneConfig.hint || 'សូមបញ្ចូល User ID និង Zone ID ត្រឹមត្រូវ'}</span>
+                    </span>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handlePerformCheckName}
                     disabled={checkingName || !playerId.trim() || (zoneConfig.required && !playerZoneId.trim())}
-                    className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-all disabled:opacity-40 cursor-pointer min-h-[40px]"
+                    className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 hover:from-cyan-500/30 hover:to-purple-500/30 text-cyan-300 border border-cyan-500/40 shadow-lg shadow-cyan-500/10 transition-all disabled:opacity-40 cursor-pointer min-h-[42px]"
                   >
                     {checkingName ? (
                       <>
@@ -531,7 +538,7 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                     ) : (
                       <>
                         <Search className="h-4 w-4" />
-                        <span>ពិនិត្យឈ្មោះគណនី (Check Player Profile)</span>
+                        <span>ពិនិត្យឈ្មោះគណនី & Zone ID (Check Player Profile)</span>
                       </>
                     )}
                   </button>

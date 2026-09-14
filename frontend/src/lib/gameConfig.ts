@@ -38,6 +38,7 @@ export function getGameZoneConfig(
 
   // 1. Mobile Legends Bang Bang & variants
   const isMLBB =
+    slug.includes('mobile-legend') ||
     slug.includes('mobile-legends') ||
     slug.includes('mlbb') ||
     slug.includes('moonton') ||

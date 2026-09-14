@@ -333,28 +333,34 @@ export async function lookupPlayerProfile(
     if (cleanZone) query.append('playerZoneId', cleanZone);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), 5000);
 
     const res = await fetch(`${API_BASE}/products/lookup/${encodeURIComponent(gameSlug)}?${query.toString()}`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.success && data.nickname) {
-        return {
-          success: true,
-          nickname: data.nickname,
-          playerId: cleanId,
-          playerZoneId: cleanZone || undefined,
-          region: data.region || 'Cambodia (Asia)',
-          level: data.level || 45,
-          avatarUrl: data.avatarUrl || `/images/games/${gameSlug}.png`,
-        };
-      }
+    const data = await res.json().catch(() => null);
+
+    if (res.ok && data && data.success && data.nickname) {
+      return {
+        success: true,
+        nickname: data.nickname,
+        playerId: cleanId,
+        playerZoneId: cleanZone || undefined,
+        region: data.region || 'Cambodia (Asia)',
+        level: data.level || 45,
+        avatarUrl: data.avatarUrl || `/images/games/${gameSlug}.png`,
+      };
     }
-  } catch (err) {
+
+    if (data && data.success === false && data.error) {
+      throw new Error(data.error);
+    }
+  } catch (err: any) {
+    if (err.message && !err.message.includes('fetch') && !err.message.includes('network') && !err.message.includes('abort')) {
+      throw err;
+    }
     console.warn('Backend ID lookup network note:', err);
   }
 
