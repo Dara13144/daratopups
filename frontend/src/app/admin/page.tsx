@@ -592,17 +592,9 @@ export default function AdminDashboard() {
         console.warn('[Upload] Supabase Storage upload note (falling back to server upload):', sbErr?.message || sbErr);
       }
 
-      // 2. Fallback to Backend Multer API upload
-      const token = getAuthToken() || '';
-      const form = new FormData();
-      form.append('image', file);
-      const res = await fetch(`${API_BASE}/admin/upload-image`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      const data = await res.json();
-      const rawUrl = data.imageUrl || data.url;
+      // 2. Fallback to Backend API upload
+      const data = await uploadAdminImage(file);
+      const rawUrl = data.url;
       if (!rawUrl) throw new Error('No image URL in response');
       return rawUrl.startsWith('http') ? rawUrl : `${serverUrl}${rawUrl}`;
     } finally {
@@ -723,13 +715,7 @@ export default function AdminDashboard() {
     setActionLoading(true); setError(''); setSuccess('');
     try {
       const imageUrl = await uploadImageToServer(editImageFile);
-      const res = await fetch(`${API_BASE}/admin/products/${productId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        credentials: 'include',
-        body: JSON.stringify({ image: imageUrl }),
-      });
-      if (!res.ok) throw new Error('Update failed');
+      await updateAdminProduct(productId, { image: imageUrl });
       setSuccess('Image updated!'); setEditingProductId(null); setEditImageFile(null); setEditImagePreview('');
       await loadAllData();
     } catch (err: any) { setError('Failed: ' + err.message); }

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Gamepad2 } from 'lucide-react';
 import { getGameArtwork } from '../lib/gameArtworks';
+import { getApiBaseUrl } from '../lib/api';
 
 interface GameIconProps {
   slug: string;
@@ -65,7 +66,7 @@ export default function GameIcon({ slug, name, image, className = 'w-full h-full
   if (image && typeof image === 'string' && image.trim()) {
     let cleanImg = image.trim();
     if (cleanImg.startsWith('/uploads')) {
-      const serverBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001').replace(/\/$/, '').replace(/\/api$/, '');
+      const serverBase = getApiBaseUrl().replace(/\/$/, '').replace(/\/api$/, '');
       cleanImg = `${serverBase}${cleanImg}`;
     }
     candidates.push(cleanImg);

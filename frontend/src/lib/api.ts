@@ -1,21 +1,156 @@
 const PRODUCTION_API = 'https://nadybackend.onrender.com';
 
-// Retrieve the raw backend URL from env, default fallback to http://localhost:5001
-const rawApiUrl = (
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  PRODUCTION_API
-);
+/**
+ * Resolves the active backend API base URL.
+ * Priority:
+ * 1. Explicit NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL or VITE_API_URL
+ * 2. In local browser environment (localhost / 127.0.0.1): http://localhost:5001
+ * 3. In production environment (Vercel, Render, custom domain): https://nadybackend.onrender.com
+ */
+export function getApiBaseUrl(): string {
+  const envUrl = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    (typeof process !== 'undefined' && (process.env as any).VITE_API_URL)
+  );
 
-// Clean up input: remove trailing slash, and remove any trailing '/api'
-export const serverUrl = rawApiUrl.replace(/\/$/, '').replace(/\/api$/, '');
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
+  }
 
-// Centralized API endpoint base
+  if (typeof window !== 'undefined') {
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '0.0.0.0';
+
+    if (isLocalhost) {
+      return 'http://localhost:5001';
+    }
+  }
+
+  return PRODUCTION_API;
+}
+
+export const serverUrl = getApiBaseUrl();
 export const API_BASE = `${serverUrl}/api`;
 
-// Dev diagnostic only — does not affect production behavior
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.info(`[NaDyTopup] resolved serverUrl: "${serverUrl}" and API_BASE: "${API_BASE}"`);
+}
+
+/**
+ * Centralized, resilient API request helper.
+ * - Handles Authorization header automatically
+ * - Retries seamlessly if local/remote fallback is needed in development
+ * - Parses true backend errors (400, 401, 403, 404, etc.) and surfaces actual message
+ * - Replaces generic "Failed to fetch" with meaningful, actionable information
+ */
+export async function apiRequest<T = any>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const fullPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
+
+  const candidateBases: string[] = [getApiBaseUrl()];
+
+  if (typeof window !== 'undefined') {
+    const isLocal =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1';
+
+    if (isLocal) {
+      if (!candidateBases.includes('http://localhost:5001')) {
+        candidateBases.unshift('http://localhost:5001');
+      }
+      if (!candidateBases.includes(PRODUCTION_API)) {
+        candidateBases.push(PRODUCTION_API);
+      }
+    }
+  }
+
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let lastError: any = null;
+
+  for (const base of candidateBases) {
+    const url = `${base}${fullPath}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const res = await fetch(url, {
+        ...options,
+        headers,
+        signal: options.signal || controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        let errorMsg = `API ${res.status}: ${res.statusText || 'Error'}`;
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const errData = await res.json().catch(() => ({}));
+          errorMsg = errData.message || errData.error || errorMsg;
+        } else {
+          const txt = await res.text().catch(() => '');
+          if (txt && txt.length < 300) errorMsg = txt;
+        }
+
+        const apiErr: any = new Error(errorMsg);
+        apiErr.status = res.status;
+        apiErr.response = res;
+
+        // If client-side error (400, 401, 403, 404, 409, 422), do not fallback to another server.
+        // Throw immediately with the REAL backend error!
+        if (res.status >= 400 && res.status < 500) {
+          throw apiErr;
+        }
+
+        lastError = apiErr;
+        continue;
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await res.json();
+      }
+      return (await res.text()) as any;
+    } catch (err: any) {
+      if (err.status && err.status >= 400 && err.status < 500) {
+        throw err;
+      }
+      lastError = err;
+      console.warn(`[API Client] Connection issue with ${url}:`, err.message || err);
+    }
+  }
+
+  if (lastError) {
+    if (
+      lastError.name === 'AbortError' ||
+      lastError.message?.includes('Failed to fetch') ||
+      lastError.message?.includes('NetworkError')
+    ) {
+      throw new Error(
+        'Unable to connect to the backend server. The server may be waking up or temporarily unavailable. Please try again in a few seconds.'
+      );
+    }
+    throw lastError;
+  }
+
+  throw new Error('API Request Failed');
 }
 
 export interface GameProduct {
@@ -186,15 +321,9 @@ export function getAuthHeaders(token?: string): Record<string, string> {
 export async function fetchProducts(): Promise<GameProduct[]> {
   // 1. Try Backend API (which queries Supabase PostgreSQL directly)
   try {
-    const res = await fetch(`${API_BASE}/products`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        return data; // Return exact live database products from Supabase
-      }
+    const data = await apiRequest<GameProduct[]>('/products');
+    if (Array.isArray(data)) {
+      return data;
     }
   } catch (err) {
     console.warn('[API] Live products API check failed, fetching from Supabase client direct:', err);
@@ -241,14 +370,8 @@ export async function fetchAdminProducts(): Promise<GameProduct[]> {
 
   // 2. Fallback to backend API
   try {
-    const res = await fetch(`${API_BASE}/products`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', ...getAuthHeaders() },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) return data;
-    }
+    const data = await apiRequest<GameProduct[]>('/products');
+    if (Array.isArray(data)) return data;
   } catch (apiErr) {
     console.warn('[API] Fallback fetch products warning:', apiErr);
   }
@@ -258,51 +381,31 @@ export async function fetchAdminProducts(): Promise<GameProduct[]> {
 
 export async function fetchProduct(slug: string): Promise<GameProduct> {
   const cleanSlug = encodeURIComponent(slug.trim());
-  const endpoints = [
-    `${API_BASE}/products/${cleanSlug}`,
-    `http://localhost:5001/api/products/${cleanSlug}`,
-  ];
-
-  let isExplicit404 = false;
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      if (res.status === 404) {
-        isExplicit404 = true;
-      }
-    } catch (err) {
-      console.warn(`[API] Failed to fetch live product from ${url}:`, err);
-    }
-  }
-
-  // Direct Supabase Query Fallback
   try {
-    const { getSupabaseClient } = await import('./supabase');
-    const client = getSupabaseClient();
-    const { data: prodData, error } = await client
-      .from('Product')
-      .select('*, packages:Package(*)')
-      .or(`slug.eq.${slug.trim()},id.eq.${slug.trim()}`)
-      .single();
+    return await apiRequest<GameProduct>(`/products/${cleanSlug}`);
+  } catch (err: any) {
+    // Direct Supabase Query Fallback if backend API is waking up or unavailable
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const { data: prodData, error } = await client
+        .from('Product')
+        .select('*, packages:Package(*)')
+        .or(`slug.eq.${slug.trim()},id.eq.${slug.trim()}`)
+        .single();
 
-    if (!error && prodData) {
-      return {
-        ...prodData,
-        packages: (prodData.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
-      };
-    }
-  } catch (err) {
-    console.warn('[API] Supabase direct single product lookup warning:', err);
+      if (!error && prodData) {
+        return {
+          ...prodData,
+          packages: (prodData.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+        };
+      }
+    } catch {}
+
+    throw (err.status === 404)
+      ? new Error('Product not found or has been removed')
+      : err;
   }
-
-  throw new Error('Product not found or has been removed');
 }
 
 export interface PlayerProfile {
@@ -386,17 +489,9 @@ export async function lookupPlayerProfile(
     const query = new URLSearchParams({ playerId: cleanId });
     if (cleanZone) query.append('playerZoneId', cleanZone);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const data = await apiRequest<any>(`/products/lookup/${encodeURIComponent(gameSlug)}?${query.toString()}`);
 
-    const res = await fetch(`${API_BASE}/products/lookup/${encodeURIComponent(gameSlug)}?${query.toString()}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-
-    const data = await res.json().catch(() => null);
-
-    if (res.ok && data && data.success && data.nickname) {
+    if (data && data.success && data.nickname) {
       return {
         success: true,
         nickname: data.nickname,
@@ -412,7 +507,7 @@ export async function lookupPlayerProfile(
       throw new Error(data.error);
     }
   } catch (err: any) {
-    if (err.message && !err.message.includes('fetch') && !err.message.includes('network') && !err.message.includes('abort')) {
+    if (err.message && !err.message.includes('fetch') && !err.message.includes('network') && !err.message.includes('abort') && !err.message.includes('connect')) {
       throw err;
     }
     console.warn('Backend ID lookup network note:', err);
@@ -455,14 +550,6 @@ export async function createOrder(
   price?: number,
   amount?: number
 ): Promise<OrderCreateResponse> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  
-  // Inject auth token if available
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const payload = {
     packageId,
     playerId,
@@ -476,29 +563,14 @@ export async function createOrder(
     amount,
   };
 
-  const res = await fetch(`${API_BASE}/orders`, {
+  return await apiRequest<OrderCreateResponse>('/orders', {
     method: 'POST',
-    headers,
     body: JSON.stringify(payload),
   });
-
-  if (!res.ok) {
-    let errMsg = 'Failed to place order';
-    try {
-      const err = await res.json();
-      errMsg = err.error || err.message || errMsg;
-    } catch {
-      errMsg = `Server returned status ${res.status}`;
-    }
-    throw new Error(errMsg);
-  }
-  return res.json();
 }
 
 export async function getOrderStatus(txnId: string): Promise<OrderStatusDetails> {
-  const res = await fetch(`${API_BASE}/orders/status/${txnId}`);
-  if (!res.ok) throw new Error('Failed to fetch order status');
-  return res.json();
+  return await apiRequest<OrderStatusDetails>(`/orders/status/${encodeURIComponent(txnId)}`);
 }
 
 export async function verifyPayment(txnId: string): Promise<{
@@ -510,157 +582,66 @@ export async function verifyPayment(txnId: string): Promise<{
   message?: string;
   error?: string;
 }> {
-  const res = await fetch(`${API_BASE}/orders/verify/${txnId}`, { method: 'POST' });
-  return res.json();
+  return await apiRequest(`/orders/verify/${encodeURIComponent(txnId)}`, {
+    method: 'POST',
+  });
 }
 
 export async function fetchOrderHistory(emailOrId: string): Promise<OrderStatusDetails[]> {
-  const res = await fetch(`${API_BASE}/orders/history/${emailOrId}`);
-  if (!res.ok) throw new Error('Failed to fetch order history');
-  return res.json();
+  return await apiRequest<OrderStatusDetails[]>(`/orders/history/${encodeURIComponent(emailOrId)}`);
 }
 
 // Authentication
 export async function login(email: string, password: string) {
-  const endpoints = [
-    `${API_BASE}/auth/login`,
-    'http://localhost:5001/api/auth/login',
-  ];
-
-  let lastError = 'Invalid credentials';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      const err = await res.json().catch(() => ({}));
-      lastError = err.error || 'Invalid email or password';
-      if (res.status === 401 || res.status === 400) {
-        // Explicit wrong password/email - don't retry other servers with same wrong credentials
-        throw new Error(lastError);
-      }
-    } catch (e: any) {
-      if (e.message && (e.message.includes('Invalid') || e.message.includes('password') || e.message.includes('email'))) {
-        throw e;
-      }
-      console.warn(`Login failed on ${url}, trying next endpoint...`);
-    }
-  }
-
-  throw new Error(lastError);
+  return await apiRequest('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export async function register(email: string, password: string) {
-  const endpoints = [
-    `${API_BASE}/auth/register`,
-    'http://localhost:5001/api/auth/register',
-  ];
-
-  let lastError = 'Registration failed';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      const err = await res.json().catch(() => ({}));
-      lastError = err.error || 'Registration failed';
-      if (res.status === 400) {
-        throw new Error(lastError);
-      }
-    } catch (e: any) {
-      if (e.message && (e.message.includes('already') || e.message.includes('registered'))) {
-        throw e;
-      }
-      console.warn(`Register failed on ${url}, trying next endpoint...`);
-    }
-  }
-
-  throw new Error(lastError);
+  return await apiRequest('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export async function loginWithGoogle(credential: string, email?: string, name?: string) {
-  const endpoints = [
-    `${API_BASE}/auth/google`,
-    'http://localhost:5001/api/auth/google',
-  ];
-
-  let lastError = 'Google login failed';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, email, name }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-      const err = await res.json().catch(() => ({}));
-      lastError = err.error || 'Google login failed';
-    } catch (e: any) {
-      console.warn(`Google login failed on ${url}, trying next endpoint...`);
-    }
-  }
-
-  throw new Error(lastError);
+  return await apiRequest('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ credential, email, name }),
+  });
 }
 
 export async function getProfile() {
-  const res = await fetch(`${API_BASE}/auth/me`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch profile');
-  return res.json();
+  const token = getAuthToken();
+  if (!token) return null;
+  try {
+    return await apiRequest('/auth/me');
+  } catch (err: any) {
+    if (err.status === 401 || err.status === 403) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('admin_token');
+      }
+      return null;
+    }
+    throw err;
+  }
 }
 
 // Simulated payments (Sandbox Trigger)
 export async function simulatePaymentCallback(txnId: string, status: 'PAID' | 'FAILED' = 'PAID') {
-  const res = await fetch(`${API_BASE}/orders/simulate-callback`, {
+  return await apiRequest('/orders/simulate-callback', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ txnId, paymentStatus: status }),
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Simulation failed');
-  }
-  return res.json();
 }
 
 
 // Admin Panel Requests
 export async function fetchAdminStats() {
-  const endpoints = [
-    `${API_BASE}/admin/stats`,
-    'http://localhost:5001/api/admin/stats',
-  ];
-
-  let lastError = 'Failed to fetch admin stats';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      if (err.error) lastError = err.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-      console.warn(`fetchAdminStats failed on ${url}, trying next endpoint...`);
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest('/admin/stats');
 }
 
 export async function fetchAdminOrders(status?: string, search?: string) {
@@ -668,42 +649,14 @@ export async function fetchAdminOrders(status?: string, search?: string) {
   if (status) params.append('status', status);
   if (search) params.append('search', search);
   const queryStr = params.toString() ? `?${params.toString()}` : '';
-
-  const endpoints = [
-    `${API_BASE}/admin/orders${queryStr}`,
-    `http://localhost:5001/api/admin/orders${queryStr}`,
-  ];
-
-  let lastError = 'Failed to fetch orders';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      if (err.error) lastError = err.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-      console.warn(`fetchAdminOrders failed on ${url}, trying next endpoint...`);
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest(`/admin/orders${queryStr}`);
 }
 
 export async function updateAdminOrderStatus(id: string, status: string, code?: string) {
-  const res = await fetch(`${API_BASE}/admin/orders/${id}`, {
+  return await apiRequest(`/admin/orders/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-    credentials: 'include',
     body: JSON.stringify({ status, stockDeliveredCode: code }),
   });
-  if (!res.ok) throw new Error('Failed to update order status');
-  return res.json();
 }
 
 /**
@@ -715,30 +668,9 @@ export async function autoVerifyAllAdminOrders(): Promise<{
   totalChecked: number;
   verifiedPaid: number;
 }> {
-  const endpoints = [
-    `${API_BASE}/admin/orders/auto-verify-all`,
-    'http://localhost:5001/api/admin/orders/auto-verify-all',
-  ];
-
-  let lastError = 'Failed to auto-verify orders';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      if (err.error) lastError = err.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest('/admin/orders/auto-verify-all', {
+    method: 'POST',
+  });
 }
 
 /**
@@ -750,71 +682,20 @@ export async function autoFulfillAdminOrder(orderId: string): Promise<{
   order: any;
   stockCode?: string;
 }> {
-  const endpoints = [
-    `${API_BASE}/admin/orders/${encodeURIComponent(orderId)}/auto-fulfill`,
-    `http://localhost:5001/api/admin/orders/${encodeURIComponent(orderId)}/auto-fulfill`,
-  ];
-
-  let lastError = 'Failed to auto-fulfill order';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      if (err.error) lastError = err.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest(`/admin/orders/${encodeURIComponent(orderId)}/auto-fulfill`, {
+    method: 'POST',
+  });
 }
 
 export async function fetchAdminStock() {
-  const endpoints = [
-    `${API_BASE}/admin/stock`,
-    'http://localhost:5001/api/admin/stock',
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {
-      console.warn(`fetchAdminStock failed on ${url}, trying next endpoint...`);
-    }
-  }
-  throw new Error('Failed to fetch stock list');
+  return await apiRequest('/admin/stock');
 }
 
 export async function addAdminStock(packageId: string, codes: string) {
-  const endpoints = [
-    `${API_BASE}/admin/stock`,
-    'http://localhost:5001/api/admin/stock',
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ packageId, codes }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to add stock codes');
+  return await apiRequest('/admin/stock', {
+    method: 'POST',
+    body: JSON.stringify({ packageId, codes }),
+  });
 }
 
 export async function addAdminProduct(
@@ -827,116 +708,73 @@ export async function addAdminProduct(
   hasZoneId: boolean = false,
   zoneIdLabel?: string
 ) {
-  const endpoints = [
-    `${API_BASE}/admin/products`,
-    'http://localhost:5001/api/admin/products',
-  ];
-
-  let lastError = 'Failed to create product';
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages, hasZoneId, zoneIdLabel }),
-      });
-      if (res.ok) return await res.json();
-      const err = await res.json().catch(() => ({}));
-      if (err.error) lastError = err.error;
-    } catch (e: any) {
-      if (e.message) lastError = e.message;
-    }
-  }
-
-  // Direct Supabase Fallback if backend API is offline
   try {
-    const { getSupabaseClient } = await import('./supabase');
-    const client = getSupabaseClient();
-    const finalSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `game-${Date.now()}`;
-    const { data: newProd, error: sbErr } = await client
-      .from('Product')
-      .insert({
-        name: name.trim(),
-        slug: finalSlug,
-        category: category.trim(),
-        image: image && image.trim() ? image.trim() : `/images/games/${finalSlug}.png`,
-        isActive: true,
-      })
-      .select('*, packages:Package(*)')
-      .single();
+    return await apiRequest('/admin/products', {
+      method: 'POST',
+      body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages, hasZoneId, zoneIdLabel }),
+    });
+  } catch (err: any) {
+    // Direct Supabase Fallback if backend API is offline
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const finalSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `game-${Date.now()}`;
+      const { data: newProd, error: sbErr } = await client
+        .from('Product')
+        .insert({
+          name: name.trim(),
+          slug: finalSlug,
+          category: category.trim(),
+          image: image && image.trim() ? image.trim() : `/images/games/${finalSlug}.png`,
+          isActive: true,
+        })
+        .select('*, packages:Package(*)')
+        .single();
 
-    if (!sbErr && newProd) {
-      return { message: 'Product created successfully in Supabase', product: newProd };
+      if (!sbErr && newProd) {
+        return { message: 'Product created successfully in Supabase', product: newProd };
+      }
+      if (sbErr) throw new Error(sbErr.message);
+    } catch (directErr: any) {
+      console.warn('[API] Direct Supabase insert warning:', directErr);
     }
-    if (sbErr) lastError = sbErr.message;
-  } catch (directErr: any) {
-    console.warn('[API] Direct Supabase insert warning:', directErr);
-  }
 
-  throw new Error(lastError);
+    throw err;
+  }
 }
 
 export async function uploadAdminImage(file: File): Promise<{ url: string; message: string }> {
   const formData = new FormData();
   formData.append('image', file);
 
-  const endpoints = [
-    `${API_BASE}/admin/upload-image`,
-    `http://localhost:5001/api/admin/upload-image`,
-  ];
-
-  let lastError = 'Image upload failed';
-
-  for (const url of endpoints) {
+  try {
+    return await apiRequest<{ url: string; message: string }>('/admin/upload-image', {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (err: any) {
+    console.warn('[API] uploadAdminImage primary failed:', err?.message);
+    // Base64 client fallback
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData,
+      const base64Data: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
 
-      if (res.ok) {
-        return await res.json();
-      }
-      const err = await res.json().catch(() => ({}));
-      lastError = err.error || 'Image upload failed';
-    } catch (e: any) {
-      console.warn(`uploadAdminImage failed on ${url}:`, e);
-    }
-  }
-
-  // Base64 client fallback
-  try {
-    const base64Data: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-    for (const url of endpoints) {
       try {
-        const res = await fetch(url, {
+        return await apiRequest<{ url: string; message: string }>('/admin/upload-image', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
           body: JSON.stringify({ imageBase64: base64Data }),
         });
-        if (res.ok) {
-          return await res.json();
-        }
       } catch {}
-    }
 
-    return { url: base64Data, message: 'Image loaded' };
-  } catch {}
+      return { url: base64Data, message: 'Image loaded' };
+    } catch {}
 
-  throw new Error(lastError);
+    throw err;
+  }
 }
 
 export async function addAdminPackage(
@@ -948,93 +786,26 @@ export async function addAdminPackage(
   badge?: string,
   image?: string
 ) {
-  const endpoints = [
-    `${API_BASE}/admin/products/${productId}/packages`,
-    `http://localhost:5001/api/admin/products/${productId}/packages`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ name, amount, price, category, badge, image }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to create package');
+  return await apiRequest(`/admin/products/${encodeURIComponent(productId)}/packages`, {
+    method: 'POST',
+    body: JSON.stringify({ name, amount, price, category, badge, image }),
+  });
 }
 
 export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string; hasZoneId?: boolean; zoneIdLabel?: string | null }) {
   const cleanId = encodeURIComponent(id.trim());
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
-  };
-
-  const endpoints = [
-    `${API_BASE}/admin/products/${cleanId}`,
-    `${serverUrl}/api/admin/products/${cleanId}`,
-    `${API_BASE}/products/${cleanId}`,
-    `${serverUrl}/api/products/${cleanId}`,
-  ];
-
-  let lastError = 'Failed to update product';
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(data),
-      });
-      const resData = await res.json().catch(() => null);
-      if (res.ok) return resData || { success: true };
-      if (resData?.error) lastError = resData.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest(`/admin/products/${cleanId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function updateAdminPackage(id: string, data: { name?: string; amount?: number; price?: number; category?: string; badge?: string; isActive?: boolean; image?: string; productId?: string }) {
   const cleanId = encodeURIComponent(id.trim());
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
-  };
-
-  const endpoints = [
-    `${API_BASE}/admin/packages/${cleanId}`,
-    `${serverUrl}/api/admin/packages/${cleanId}`,
-    `${API_BASE}/packages/${cleanId}`,
-    `${serverUrl}/api/packages/${cleanId}`,
-  ];
-
-  let lastError = 'Failed to update package';
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(data),
-      });
-      const resData = await res.json().catch(() => null);
-      if (res.ok) return resData || { success: true };
-      if (resData?.error) lastError = resData.error;
-    } catch (e: any) {
-      if (e?.message) lastError = e.message;
-    }
-  }
-  throw new Error(lastError);
+  return await apiRequest(`/admin/packages/${cleanId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function deleteAdminProduct(id: string) {
@@ -1065,26 +836,13 @@ export async function deleteAdminProduct(id: string) {
   }
 
   // 2. Delete via Backend API (Deletes cascaded Prisma records & notifies Realtime)
-  const endpoints = [
-    `${API_BASE}/admin/products/${cleanId}`,
-    `${serverUrl}/api/admin/products/${cleanId}`,
-    `${API_BASE}/products/${cleanId}`,
-    `${serverUrl}/api/products/${cleanId}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers,
-      });
-      if (res.ok) {
-        isDeleted = true;
-        break;
-      }
-    } catch (e: any) {
-      console.warn(`[API] Delete attempt failed on ${url}:`, e?.message);
-    }
+  try {
+    await apiRequest(`/admin/products/${cleanId}`, {
+      method: 'DELETE',
+    });
+    isDeleted = true;
+  } catch (e: any) {
+    console.warn(`[API] Delete attempt failed via backend:`, e?.message);
   }
 
   // 3. Post-Delete Supabase Verification Check
@@ -1124,33 +882,17 @@ export async function deleteAdminPackage(id: string) {
 
   console.log('[API] Deleting package from database:', id);
   const cleanId = encodeURIComponent(id.trim());
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : getAuthHeaders()),
-  };
 
   let isDeleted = false;
 
   // 1. Delete via Backend API
-  const endpoints = [
-    `${API_BASE}/admin/packages/${cleanId}`,
-    `${serverUrl}/api/admin/packages/${cleanId}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers,
-      });
-      if (res.ok) {
-        isDeleted = true;
-        break;
-      }
-    } catch (e: any) {
-      console.warn(`[API] Package delete attempt failed on ${url}:`, e?.message);
-    }
+  try {
+    await apiRequest(`/admin/packages/${cleanId}`, {
+      method: 'DELETE',
+    });
+    isDeleted = true;
+  } catch (e: any) {
+    console.warn(`[API] Package delete attempt failed via backend:`, e?.message);
   }
 
   // 2. Direct Supabase Client Delete
@@ -1189,251 +931,105 @@ export async function downloadAdminBackup() {
 }
 
 export async function createAdminSnapshot() {
-  const endpoints = [
-    `${API_BASE}/admin/backup/create-snapshot`,
-    'http://localhost:5001/api/admin/backup/create-snapshot',
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to create snapshot');
+  return await apiRequest('/admin/backup/create-snapshot', {
+    method: 'POST',
+    credentials: 'include',
+  });
 }
 
 export async function fetchAdminSnapshots() {
-  const endpoints = [
-    `${API_BASE}/admin/backup/snapshots`,
-    'http://localhost:5001/api/admin/backup/snapshots',
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {
-      console.warn(`fetchAdminSnapshots failed on ${url}, trying next endpoint...`);
-    }
+  try {
+    return await apiRequest<{ snapshots: any[] }>('/admin/backup/snapshots', {
+      credentials: 'include',
+    });
+  } catch (e) {
+    console.warn('[API] fetchAdminSnapshots failed:', e);
+    return { snapshots: [] };
   }
-  return { snapshots: [] };
 }
 
 export async function restoreAdminBackup(options: { filename?: string; backupPayload?: any }) {
-  const endpoints = [
-    `${API_BASE}/admin/backup/restore`,
-    'http://localhost:5001/api/admin/backup/restore',
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        credentials: 'include',
-        body: JSON.stringify(options),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to restore backup');
+  return await apiRequest('/admin/backup/restore', {
+    method: 'POST',
+    credentials: 'include',
+    body: JSON.stringify(options),
+  });
 }
 
 export async function deleteAdminSnapshot(filename: string) {
-  const endpoints = [
-    `${API_BASE}/admin/backup/snapshots/${encodeURIComponent(filename)}`,
-    `http://localhost:5001/api/admin/backup/snapshots/${encodeURIComponent(filename)}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to delete snapshot');
+  return await apiRequest(`/admin/backup/snapshots/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
 }
 
 // ─── Security & Anti-DDoS API ────────────────────────────────────────────────
 export async function fetchSecurityStats() {
-  const endpoints = [
-    `${API_BASE}/security/stats`,
-    'http://localhost:5001/api/security/stats',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to fetch security stats');
+  return await apiRequest('/security/stats', { credentials: 'include' });
 }
 
 export async function fetchSecurityLogs(limit: number = 50) {
-  const endpoints = [
-    `${API_BASE}/security/logs?limit=${limit}`,
-    `http://localhost:5001/api/security/logs?limit=${limit}`,
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to fetch security logs');
+  return await apiRequest(`/security/logs?limit=${limit}`, { credentials: 'include' });
 }
 
 export async function fetchSecurityConfig() {
-  const endpoints = [
-    `${API_BASE}/security/config`,
-    'http://localhost:5001/api/security/config',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to fetch security config');
+  return await apiRequest('/security/config', { credentials: 'include' });
 }
 
 export async function updateSecurityConfig(config: any) {
-  const endpoints = [
-    `${API_BASE}/security/config`,
-    'http://localhost:5001/api/security/config',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        credentials: 'include',
-        body: JSON.stringify(config),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to update security config');
+  return await apiRequest('/security/config', {
+    method: 'PUT',
+    credentials: 'include',
+    body: JSON.stringify(config),
+  });
 }
 
 export async function blockSecurityIp(ip: string, reason: string, durationMinutes?: number) {
-  const endpoints = [
-    `${API_BASE}/security/ip/block`,
-    'http://localhost:5001/api/security/ip/block',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ ip, reason, durationMinutes }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to block IP');
+  return await apiRequest('/security/ip/block', {
+    method: 'POST',
+    body: JSON.stringify({ ip, reason, durationMinutes }),
+  });
 }
 
 export async function unblockSecurityIp(ip: string) {
-  const endpoints = [
-    `${API_BASE}/security/ip/unblock`,
-    'http://localhost:5001/api/security/ip/unblock',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ ip }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to unblock IP');
+  return await apiRequest('/security/ip/unblock', {
+    method: 'POST',
+    body: JSON.stringify({ ip }),
+  });
 }
 
 export async function allowSecurityIp(ip: string, reason?: string) {
-  const endpoints = [
-    `${API_BASE}/security/ip/allow`,
-    'http://localhost:5001/api/security/ip/allow',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ ip, reason }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to allowlist IP');
+  return await apiRequest('/security/ip/allow', {
+    method: 'POST',
+    body: JSON.stringify({ ip, reason }),
+  });
 }
 
 export async function removeAllowSecurityIp(ip: string) {
-  const endpoints = [
-    `${API_BASE}/security/ip/allow`,
-    'http://localhost:5001/api/security/ip/allow',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ ip }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Failed to remove IP from allowlist');
+  return await apiRequest('/security/ip/allow', {
+    method: 'DELETE',
+    body: JSON.stringify({ ip }),
+  });
 }
 
 export async function fetchMyIp(): Promise<string> {
-  const endpoints = [
-    `${API_BASE}/security/my-ip`,
-    'http://localhost:5001/api/security/my-ip',
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        return data.ip || '127.0.0.1';
-      }
-    } catch (e) {}
+  try {
+    const data = await apiRequest<{ ip?: string }>('/security/my-ip');
+    return data.ip || '127.0.0.1';
+  } catch {
+    return '127.0.0.1';
   }
-  return '127.0.0.1';
 }
 
 export async function fetchSecurityChallenge() {
-  const res = await fetch(`${API_BASE}/security/challenge`);
-  if (!res.ok) throw new Error('Failed to request challenge');
-  return res.json();
+  return await apiRequest('/security/challenge');
 }
 
 export async function verifySecurityChallenge(nonce: string, timestamp: number, clientHash: string) {
-  const res = await fetch(`${API_BASE}/security/challenge/verify`, {
+  return await apiRequest('/security/challenge/verify', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nonce, timestamp, clientHash }),
   });
-  if (!res.ok) throw new Error('Challenge verification failed');
-  return res.json();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1469,63 +1065,35 @@ export interface ContactMessageItem {
  * Submit customer contact / support ticket
  */
 export async function submitContactMessage(payload: ContactMessagePayload) {
-  const endpoints = [
-    `${API_BASE}/contact`,
-    'http://localhost:5001/api/contact',
-  ];
-
-  let lastError: any = null;
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        return data;
-      }
-      lastError = new Error(data.error || 'Failed to submit contact message');
-    } catch (err: any) {
-      lastError = err;
-    }
-  }
-
-  // Fallback to direct Supabase client insertion if backend unreachable
   try {
-    const { submitContactMessageSupabase } = await import('./supabase');
-    const directData = await submitContactMessageSupabase(payload);
-    return {
-      success: true,
-      message: 'Your message has been submitted directly to support.',
-      ticketId: directData.id,
-      data: directData,
-    };
-  } catch (supabaseErr: any) {
-    console.error('Supabase fallback error:', supabaseErr);
-  }
+    return await apiRequest('/contact', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (err: any) {
+    // Fallback to direct Supabase client insertion if backend unreachable
+    try {
+      const { submitContactMessageSupabase } = await import('./supabase');
+      const directData = await submitContactMessageSupabase(payload);
+      return {
+        success: true,
+        message: 'Your message has been submitted directly to support.',
+        ticketId: directData.id,
+        data: directData,
+      };
+    } catch (supabaseErr: any) {
+      console.error('Supabase fallback error:', supabaseErr);
+    }
 
-  throw lastError || new Error('Failed to send contact message');
+    throw err;
+  }
 }
 
 /**
  * Fetch ticket status by ID
  */
 export async function fetchContactTicket(ticketId: string) {
-  const endpoints = [
-    `${API_BASE}/contact/ticket/${ticketId}`,
-    `http://localhost:5001/api/contact/ticket/${ticketId}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-  throw new Error('Support ticket not found');
+  return await apiRequest(`/contact/ticket/${encodeURIComponent(ticketId)}`);
 }
 
 /**
@@ -1549,40 +1117,39 @@ export async function fetchAdminContactMessages(params?: {
   if (params?.page) query.set('page', String(params.page));
   if (params?.limit) query.set('limit', String(params.limit));
 
-  const endpoints = [
-    `${API_BASE}/admin/contact?${query.toString()}`,
-    `http://localhost:5001/api/admin/contact?${query.toString()}`,
-  ];
-
-  // Direct Supabase Fallback (single source of truth)
   try {
-    const { getSupabaseClient } = await import('./supabase');
-    const client = getSupabaseClient();
-    const { data: sbMsgs } = await client
-      .from('ContactMessage')
-      .select('*')
-      .order('createdAt', { ascending: false });
+    return await apiRequest(`/admin/contact?${query.toString()}`);
+  } catch (err) {
+    // Direct Supabase Fallback (single source of truth)
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const { data: sbMsgs } = await client
+        .from('ContactMessage')
+        .select('*')
+        .order('createdAt', { section: false, ascending: false } as any);
 
-    if (Array.isArray(sbMsgs)) {
-      return {
-        messages: sbMsgs,
-        total: sbMsgs.length,
-        pendingCount: sbMsgs.filter((m: any) => m.status === 'PENDING').length,
-        page: 1,
-        totalPages: 1,
-      };
+      if (Array.isArray(sbMsgs)) {
+        return {
+          messages: sbMsgs,
+          total: sbMsgs.length,
+          pendingCount: sbMsgs.filter((m: any) => m.status === 'PENDING').length,
+          page: 1,
+          totalPages: 1,
+        };
+      }
+    } catch (sbErr) {
+      console.warn('[API] Supabase contact messages direct fetch warning:', sbErr);
     }
-  } catch (sbErr) {
-    console.warn('[API] Supabase contact messages direct fetch warning:', sbErr);
-  }
 
-  return {
-    messages: [],
-    total: 0,
-    pendingCount: 0,
-    page: 1,
-    totalPages: 1,
-  };
+    return {
+      messages: [],
+      total: 0,
+      pendingCount: 0,
+      page: 1,
+      totalPages: 1,
+    };
+  }
 }
 
 /**
@@ -1592,45 +1159,19 @@ export async function updateAdminContactMessage(
   id: string,
   data: { status?: string; reply?: string }
 ) {
-  const endpoints = [
-    `${API_BASE}/admin/contact/${id}`,
-    `http://localhost:5001/api/admin/contact/${id}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-
-  throw new Error('Failed to update contact message');
+  return await apiRequest(`/admin/contact/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 /**
  * Delete a contact message
  */
 export async function deleteAdminContactMessage(id: string) {
-  const endpoints = [
-    `${API_BASE}/admin/contact/${id}`,
-    `http://localhost:5001/api/admin/contact/${id}`,
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {}
-  }
-
-  throw new Error('Failed to delete contact message');
+  return await apiRequest(`/admin/contact/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 
