@@ -107,13 +107,13 @@ export default function Footer() {
             </span>
 
             {/* ABA Badge */}
-            <div className="h-6 px-2.5 rounded-md bg-[#002f43] border border-cyan-500/40 flex items-center justify-center shadow-xs">
+            <div className="h-6 px-2.5 rounded-md bg-[#002f43] border border-cyan-500/40 flex items-center justify-center shadow-xs hover:scale-105 hover:border-cyan-400 hover:shadow-cyan-500/30 transition-all cursor-default">
               <span className="text-white font-black text-[11px] tracking-wider">ABA</span>
-              <span className="h-2 w-0.5 bg-red-500 ml-1 rounded-full"></span>
+              <span className="h-2 w-0.5 bg-red-500 ml-1 rounded-full animate-pulse"></span>
             </div>
 
             {/* KHQR Badge */}
-            <div className="h-6 px-2.5 rounded-md bg-[#e11d48] border border-rose-400/40 flex items-center justify-center shadow-xs">
+            <div className="h-6 px-2.5 rounded-md bg-[#e11d48] border border-rose-400/40 flex items-center justify-center shadow-xs hover:scale-105 hover:border-rose-400 hover:shadow-rose-500/30 transition-all cursor-default">
               <span className="text-white font-black text-[11px] tracking-wider font-mono">KHQR</span>
             </div>
           </div>

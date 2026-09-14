@@ -686,14 +686,14 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:gap-4">
-                {/* ABA KHQR Payment Card with Checkmark (White Card Design) */}
+                {/* ABA KHQR Payment Card with Checkmark (Interactive Animated Design) */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('BAKONG')}
-                  className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all text-left flex items-center justify-between border-[#00c988] bg-white ring-2 ring-[#00c988]/30 shadow-md min-h-[58px] active:scale-[0.99] cursor-pointer group"
+                  className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all duration-200 text-left flex items-center justify-between border-[#00c988] bg-white ring-2 ring-[#00c988]/30 shadow-md min-h-[58px] active:scale-[0.99] cursor-pointer group hover:shadow-xl hover:shadow-[#00c988]/20 hover:border-emerald-400"
                 >
                   <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl overflow-hidden shrink-0 bg-slate-950 p-0.5 flex items-center justify-center border border-slate-800 shadow-xs">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl overflow-hidden shrink-0 bg-slate-950 p-0.5 flex items-center justify-center border border-slate-800 shadow-xs group-hover:scale-105 transition-transform duration-300">
                       <img
                         src="/images/payments/aba-khqr.svg"
                         alt="ABA KHQR"
@@ -702,15 +702,21 @@ export default function GameDetailsPage({ params }: { params: Promise<{ slug: st
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center space-x-2">
-                        <h4 className="text-slate-900 font-black text-xs sm:text-sm">ABA KHQR</h4>
-                        <span className="text-[8px] sm:text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded">Instant Scan</span>
+                        <h4 className="text-slate-900 font-black text-xs sm:text-sm tracking-tight">ABA KHQR</h4>
+                        <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300/80 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-600"></span>
+                          </span>
+                          <span>Instant Scan</span>
+                        </span>
                       </div>
-                      <span className="text-slate-500 text-[11px] sm:text-xs leading-tight block mt-0.5 truncate">Scan to pay with any banking app</span>
+                      <span className="text-slate-500 text-[11px] sm:text-xs leading-tight block mt-0.5 truncate">Scan to pay with any banking app in Cambodia</span>
                     </div>
                   </div>
 
                   {/* Green Checkmark Badge on Right */}
-                  <div className="h-6 w-6 rounded-full bg-emerald-100 border border-emerald-500 flex items-center justify-center text-emerald-600 shrink-0 ml-2 shadow-xs">
+                  <div className="h-7 w-7 rounded-full bg-emerald-100 border border-emerald-500 flex items-center justify-center text-emerald-600 shrink-0 ml-2 shadow-xs group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-200">
                     <CheckCircle className="h-4 w-4" />
                   </div>
                 </button>

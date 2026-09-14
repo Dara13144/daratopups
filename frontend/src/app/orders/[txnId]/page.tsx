@@ -370,15 +370,22 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                     </div>
 
                     {/* Official KHQR Ticket Card Container */}
-                    <div className="w-full max-w-[304px] min-[360px]:max-w-[324px] bg-white rounded-2xl sm:rounded-[24px] overflow-hidden shadow-2xl border border-slate-200 flex flex-col text-slate-800 animate-in fade-in duration-200">
+                    <div className="w-full max-w-[304px] min-[360px]:max-w-[324px] bg-white rounded-2xl sm:rounded-[24px] overflow-hidden shadow-2xl border border-slate-200 flex flex-col text-slate-800 animate-in fade-in duration-200 animate-aba-card-glow">
                       
-                      {/* Red KHQR Header Banner */}
-                      <div className="bg-[#E51821] py-3 sm:py-3.5 px-4 sm:px-6 flex items-center justify-between relative text-white rounded-t-2xl sm:rounded-t-[24px]">
-                        <span className="font-black tracking-widest text-lg sm:text-xl font-sans select-none drop-shadow-xs">
-                          KHQR
-                        </span>
-                        <span className="text-[10px] font-extrabold tracking-wider bg-white/20 px-2 py-0.5 rounded uppercase font-sans">
-                          ABA
+                      {/* Red KHQR Header Banner with Live Pulse Beacon */}
+                      <div className="bg-[#E51821] py-3 sm:py-3.5 px-4 sm:px-6 flex items-center justify-between relative text-white rounded-t-2xl sm:rounded-t-[24px] shadow-sm">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-black tracking-widest text-lg sm:text-xl font-sans select-none drop-shadow-xs">
+                            KHQR
+                          </span>
+                          <span className="relative flex h-2 w-2" title="Live Auto-Detect">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-extrabold tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full uppercase font-sans flex items-center gap-1.5 shadow-inner">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse"></span>
+                          <span>ABA</span>
                         </span>
                       </div>
 
@@ -397,29 +404,41 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                         <div className="border-b-2 border-dashed border-slate-200 w-full"></div>
                       </div>
 
-                      {/* QR Code Canvas (Clickable to open ABA Mobile directly) */}
+                      {/* QR Code Canvas (Clickable to open ABA Mobile directly) with Live Laser Scan Line */}
                       <div 
                         className="px-4 sm:px-6 py-2 flex justify-center cursor-pointer active:scale-95 transition-transform"
                         onClick={handleOpenAba}
                         title="Tap to open in ABA Mobile"
                       >
-                        <div className="relative p-2.5 sm:p-3 bg-white rounded-xl sm:rounded-2xl border border-slate-100 flex items-center justify-center shadow-xs">
+                        <div className="relative p-2.5 sm:p-3 bg-white rounded-xl sm:rounded-2xl border border-slate-100 flex items-center justify-center shadow-xs overflow-hidden">
+                          {/* Animated Laser Scanning Line */}
+                          <div className="animate-khqr-scan"></div>
+
                           <img 
                             src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(order.paymentQrCode || order.paymentTxnId)}`}
                             alt="KHQR Code"
-                            className="w-40 h-40 min-[360px]:w-48 min-[360px]:h-48 rounded-lg object-contain"
+                            className="w-40 h-40 min-[360px]:w-48 min-[360px]:h-48 rounded-lg object-contain select-none"
                           />
-                          {/* Floating central black circle with white $ sign */}
-                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-slate-950 flex items-center justify-center shadow-xl border-2 border-white select-none font-sans">
+                          {/* Floating central black circle with white $ sign and pulsing ring */}
+                          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-slate-950 flex items-center justify-center shadow-xl border-2 border-white select-none font-sans ring-4 ring-[#e51821]/20 animate-pulse">
                             <span className="text-white font-black text-sm sm:text-base font-sans">$</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Scanning Instructions inside card */}
-                      <p className="text-slate-500 text-[10px] sm:text-[11px] px-4 sm:px-6 text-center leading-tight py-2.5 sm:py-3 font-medium font-sans border-t border-slate-100 mt-1">
-                        Scan with mobile banking app<br/>that supports KHQR
-                      </p>
+                      {/* Scanning Instructions inside card with Live Status */}
+                      <div className="px-4 sm:px-6 py-2.5 sm:py-3 text-center border-t border-slate-100 mt-1 flex flex-col items-center">
+                        <div className="inline-flex items-center space-x-1.5 text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-0.5">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                          </span>
+                          <span>Ready for Payment</span>
+                        </div>
+                        <p className="text-slate-500 text-[10px] sm:text-[11px] leading-tight font-medium font-sans">
+                          Scan with ABA Mobile or any app supporting KHQR
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ) : (
