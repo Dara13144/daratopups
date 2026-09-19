@@ -100,6 +100,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'nadystore-backend.onrender.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'nadybackend.onrender.com',
       },
       {
@@ -121,7 +125,7 @@ const nextConfig: NextConfig = {
       !process.env.NEXT_PUBLIC_API_URL.includes('localhost') &&
       !process.env.NEXT_PUBLIC_API_URL.includes('127.0.0.1')
         ? process.env.NEXT_PUBLIC_API_URL
-        : 'https://nadybackend.onrender.com',
+        : 'https://nadystore-backend.onrender.com',
   },
 
   // Fix turbopack root warning

@@ -16,9 +16,9 @@ services:
       - key: SANDBOX_MODE
         value: "false"
       - key: BACKEND_URL
-        value: https://nadybackend.onrender.com
+        value: https://nadystore-backend.onrender.com
       - key: FRONTEND_URL
-        value: https://nadyfrontend.onrender.com
+        value: https://www.nadytopup.site
 
   - type: web
     name: nadyfrontend
@@ -34,8 +34,8 @@ services:
       - key: PORT
         value: 3000
       - key: NEXT_PUBLIC_API_URL
-        value: https://nadybackend.onrender.com
+        value: https://nadystore-backend.onrender.com
       - key: NEXT_PUBLIC_BACKEND_URL
-        value: https://nadybackend.onrender.com
+        value: https://nadystore-backend.onrender.com
       - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
         value: "570013043660-p5uujjtc2sq24si85q3thmliqnf3s9uc.apps.googleusercontent.com"

@@ -1,5 +1,5 @@
 const LOCAL_API = 'http://localhost:5001';
-const PRODUCTION_API = 'https://kvmvddsbotnet.onrender.com';
+const PRODUCTION_API = 'https://nadystore-backend.onrender.com';
 
 /**
  * Resolves the active backend API base URL.
