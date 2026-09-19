@@ -1,18 +1,20 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Header from '../../../components/Header';
 import Footer from '../../../components/Footer';
+import AbaKhqrModal from '../../../components/AbaKhqrModal';
 import { getOrderStatus, simulatePaymentCallback, verifyPayment, OrderStatusDetails, API_BASE } from '../../../lib/api';
 import { subscribeToOrderRealtime } from '../../../lib/supabase';
-import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, CreditCard, Copy, Check, Info, Sparkles, QrCode, X, Download, ChevronLeft, RefreshCw, AlertCircle, Home } from 'lucide-react';
 import Link from 'next/link';
 import { useLanguage } from '../../../lib/LanguageContext';
 
-export default function CheckoutPage({ params }: { params: Promise<{ txnId: string }> }) {
+export default function CheckoutPage() {
   const router = useRouter();
-  const [txnId, setTxnId] = useState('');
+  const routeParams = useParams();
+  const txnId = (routeParams?.txnId as string) || '';
   const [order, setOrder] = useState<OrderStatusDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,6 +22,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
   const [simulating, setSimulating] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState('');
+  const [showKhqrModal, setShowKhqrModal] = useState(true);
   const [showSuccessModal, setShowSuccessModal] = useState(true);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -68,10 +71,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
   // Polling ref/timer
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    params.then((p) => setTxnId(p.txnId));
-  }, [params]);
-
   const fetchStatus = async (showLoading = false) => {
     if (!txnId) return;
     if (showLoading) setLoading(true);
@@ -105,13 +104,27 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
       fetchStatus(false);
     });
 
-    // 2. High-reliability polling fallback every 3 seconds
+    // 2. High-reliability continuous auto-check every 2 seconds
     pollingRef.current = setInterval(() => {
       fetchStatus(false);
-    }, 3000);
+    }, 2000);
+
+    // 3. Instant auto-check on window focus & visibility change (tab return from banking app)
+    const handleFocus = () => {
+      fetchStatus(false);
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchStatus(false);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [txnId]);
@@ -201,7 +214,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     // Brand
     ctx.fillStyle = '#06b6d4';
     ctx.font = 'bold 14px sans-serif';
-    ctx.fillText('NA-DY TOPUP', 350, 50);
+    ctx.fillText('NADYTOPUP.SITE', 330, 50);
 
     // Green check icon container
     ctx.fillStyle = '#e6f4ea';
@@ -245,7 +258,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     rows.push(
       ['Nickname:', order.playerNickname || 'Verified Account'],
       ['Payment:', order.paymentMethod || 'KHQR'],
-      ['Price:', `${order.price.toFixed(2)} USD`],
+      ['Price:', `${Number(order.price || 0).toFixed(2)} USD`],
       ['Transaction ID:', order.paymentTxnId],
       ['Date:', new Date(order.createdAt).toLocaleString()]
     );
@@ -272,7 +285,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
     ctx.fillStyle = '#94a3b8';
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Thank you for choosing NA-DY TOPUP Cambodia!', 250, 620);
+    ctx.fillText('Thank you for choosing NADYTOPUP.SITE Cambodia!', 250, 620);
     ctx.fillText('Support Telegram: @darazzdev', 250, 640);
 
     // Save and download
@@ -335,165 +348,41 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
           <div className="space-y-4 sm:space-y-6">
             
             {order.status === 'PENDING' && (
-              <div className="glass-panel p-3.5 sm:p-6 bg-slate-900/90 border-slate-800 shadow-xl text-center rounded-2xl sm:rounded-3xl">
-                
-                {isKhqr ? (
-                  /* KHQR SCAN FLOW (Bakong / Canadia / ABA) */
-                  <div className="flex flex-col items-center">
-                    
-                    {/* Header Bar: Back Chevron + ABA KHQR Title + Animated Circular Countdown */}
-                    <div className="flex items-center justify-between w-full max-w-[304px] min-[360px]:max-w-[324px] mb-3 sm:mb-4 text-slate-200 px-1">
-                      <div className="flex items-center space-x-2 font-bold text-sm">
-                        <Link href="/" className="p-2 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 transition-all min-w-[36px] min-h-[36px] flex items-center justify-center">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Link>
-                        <span className="font-extrabold text-sm sm:text-base tracking-wide text-white truncate">
-                          {order.paymentMethod === 'CANADIA' ? 'CANADIA KHQR' : 'ABA KHQR'}
-                        </span>
-                      </div>
-                      
-                      {/* Circular Countdown Timer */}
-                      <div className="flex items-center space-x-1.5 sm:space-x-2 font-mono text-[11px] sm:text-xs text-slate-200 bg-slate-800 border border-slate-700 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full shadow-inner shrink-0">
-                        <div className="relative w-3.5 h-3.5 sm:w-4 sm:h-4 flex items-center justify-center">
-                          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                            <path
-                              className="text-slate-700"
-                              strokeWidth="4"
-                              stroke="currentColor"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                            <path
-                              className="text-cyan-400 transition-all duration-1000 ease-linear"
-                              strokeDasharray="100, 100"
-                              strokeDashoffset={100 - ((timeLeft || 0) / 900) * 100}
-                              strokeWidth="4"
-                              strokeLinecap="round"
-                              stroke="currentColor"
-                              fill="none"
-                              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                          </svg>
-                        </div>
-                        <span className="font-extrabold text-cyan-400">{formatTime(timeLeft || 0)}</span>
-                      </div>
+              <>
+                <AbaKhqrModal
+                  order={order}
+                  isOpen={showKhqrModal}
+                  onClose={() => setShowKhqrModal(false)}
+                  onPaymentSuccess={(updated) => {
+                    setOrder(updated);
+                    fetchStatus(false);
+                  }}
+                />
+
+                {!showKhqrModal && (
+                  <div className="glass-panel p-6 sm:p-8 bg-slate-900/90 border border-slate-800 text-center space-y-4 rounded-2xl sm:rounded-3xl shadow-xl">
+                    <div className="w-14 h-14 bg-[#E11D24]/15 rounded-full flex items-center justify-center text-[#E11D24] mx-auto border border-[#E11D24]/30">
+                      <QrCode className="w-7 h-7" />
                     </div>
-
-                    {/* Official KHQR Ticket Card Container */}
-                    <div className="w-full max-w-[304px] min-[360px]:max-w-[324px] bg-white rounded-2xl sm:rounded-[24px] overflow-hidden shadow-2xl border border-slate-200 flex flex-col text-slate-800 animate-in fade-in duration-200 animate-aba-card-glow">
-                      
-                      {/* Red KHQR Header Banner with Live Pulse Beacon */}
-                      <div className="bg-[#E51821] py-3 sm:py-3.5 px-4 sm:px-6 flex items-center justify-between relative text-white rounded-t-2xl sm:rounded-t-[24px] shadow-sm">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-black tracking-widest text-lg sm:text-xl font-sans select-none drop-shadow-xs">
-                            KHQR
-                          </span>
-                          <span className="relative flex h-2 w-2" title="Live Auto-Detect">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-extrabold tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full uppercase font-sans flex items-center gap-1.5 shadow-inner">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse"></span>
-                          <span>ABA</span>
-                        </span>
-                      </div>
-
-                      {/* Merchant Name & Total Amount */}
-                      <div className="text-center pt-4 sm:pt-5 px-4 sm:px-6 space-y-0.5">
-                        <span className="block text-[11px] sm:text-xs text-slate-400 font-extrabold tracking-wider uppercase font-sans select-none">
-                          NA-DY TOPUP
-                        </span>
-                        <span className="block text-slate-900 font-black text-xl sm:text-2xl tracking-tight font-sans">
-                          {order.price.toFixed(2)} <span className="text-xs sm:text-sm font-bold text-slate-500">USD</span>
-                        </span>
-                      </div>
-
-                      {/* Dashed Separator Line */}
-                      <div className="px-4 sm:px-6 py-1.5 sm:py-2">
-                        <div className="border-b-2 border-dashed border-slate-200 w-full"></div>
-                      </div>
-
-                      {/* QR Code Canvas (Clickable to open ABA Mobile directly) */}
-                      <div 
-                        className="px-4 sm:px-6 py-2 flex justify-center cursor-pointer active:scale-95 transition-transform"
-                        onClick={handleOpenAba}
-                        title="Tap to open in ABA Mobile"
-                      >
-                        <div className="relative p-2.5 sm:p-3 bg-white rounded-xl sm:rounded-2xl border border-slate-100 flex items-center justify-center shadow-xs overflow-hidden">
-                          <img 
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(order.paymentQrCode || order.paymentTxnId)}`}
-                            alt="KHQR Code"
-                            className="w-40 h-40 min-[360px]:w-48 min-[360px]:h-48 rounded-lg object-contain select-none"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Scanning Instructions inside card with Live Status */}
-                      <div className="px-4 sm:px-6 py-2.5 sm:py-3 text-center border-t border-slate-100 mt-1 flex flex-col items-center">
-                        <div className="inline-flex items-center space-x-1.5 text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-0.5">
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                          </span>
-                          <span>Ready for Payment</span>
-                        </div>
-                        <p className="text-slate-500 text-[10px] sm:text-[11px] leading-tight font-medium font-sans">
-                          Scan with ABA Mobile or any app supporting KHQR
-                        </p>
-                      </div>
+                    <div className="flex flex-col items-center gap-1.5">
+                      <h3 className="text-xl font-black text-white">Pending KHQR Payment</h3>
+                      <p className="text-slate-400 text-xs mt-1">Please scan the ABA KHQR code to complete your recharge.</p>
                     </div>
-                  </div>
-                ) : (
-                  /* ABA PAYWAY CARD FLOW */
-                  <div className="flex flex-col items-center py-4 sm:py-6">
-                    <span className="inline-flex items-center space-x-1 text-[10px] font-bold tracking-wider text-cyan-400 uppercase bg-cyan-950/50 px-3 py-1 rounded-full border border-cyan-500/30 mb-4 sm:mb-6">
-                      <CreditCard className="h-3.5 w-3.5 text-cyan-400" />
-                      <span>ABA PayWay Checkout Portal</span>
-                    </span>
-
-                    <div className="bg-slate-800/80 border border-slate-700 p-4 sm:p-6 rounded-2xl max-w-sm w-full text-left space-y-3 mb-6">
-                      <div className="flex justify-between items-center pb-2.5 border-b border-slate-700">
-                        <span className="text-slate-400 text-xs font-semibold">ABA Merchant ID</span>
-                        <span className="text-white font-bold text-xs">{order.abaPayload?.merchant_id || 'MOCK_MERCHANT_ID'}</span>
-                      </div>
-                      <div className="flex justify-between items-center pb-2.5 border-b border-slate-700">
-                        <span className="text-slate-400 text-xs font-semibold">Reference Transaction</span>
-                        <span className="text-cyan-400 font-mono font-bold text-xs select-all truncate max-w-[140px]">{order.paymentTxnId}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400 text-xs font-semibold">Billing currency</span>
-                        <span className="text-white font-bold text-xs">USD ($)</span>
-                      </div>
-                    </div>
-
-                    {order.abaPayload && order.abaApiUrl ? (
-                      <form action={order.abaApiUrl} method="POST" className="w-full max-w-sm px-4">
-                        {Object.entries(order.abaPayload).map(([key, val]: any) => (
-                          <input key={key} type="hidden" name={key} value={val} />
-                        ))}
-                        <button
-                          type="submit"
-                          className="w-full py-3 px-6 rounded-xl bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-md text-center block uppercase tracking-wider min-h-[44px]"
-                        >
-                          Proceed to Pay
-                        </button>
-                      </form>
-                    ) : (
-                      <div className="text-center py-2">
-                        <h4 className="text-white font-bold text-sm mb-1">Pay with ABA</h4>
-                        <p className="text-slate-400 text-xs max-w-xs">
-                          Redirecting to secure bank portal or payment verification hooks.
-                        </p>
-                      </div>
-                    )}
+                    <button
+                      onClick={() => setShowKhqrModal(true)}
+                      className="w-full py-3 rounded-xl bg-[#E11D24] hover:bg-[#c8111a] text-white font-bold text-sm shadow-md flex items-center justify-center space-x-2 transition-all active:scale-[0.99]"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      <span>Open ABA KHQR Payment Modal</span>
+                    </button>
                   </div>
                 )}
-
-              </div>
+              </>
             )}
 
+
             {/* PAYMENT SUCCESS STATUS STATE */}
+
             {(order.status === 'COMPLETED' || order.status === 'SUCCESS' || order.status === 'PAID') && (
               <div className="glass-panel p-6 sm:p-8 bg-slate-900/90 border-emerald-500/40 text-center space-y-4 rounded-2xl sm:rounded-3xl shadow-xl">
                 <div className="h-14 w-14 sm:h-16 sm:w-16 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 mx-auto border border-emerald-500/30">
@@ -625,8 +514,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
               <div className="space-y-1 mb-5">
                 <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
                   <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">Product</span>
-                  <span className="text-white font-extrabold text-right truncate max-w-[190px]">
-                    {order.gameName} - {order.packageName}
+                  <span className="text-white font-extrabold text-right truncate max-w-[190px] flex items-center justify-end gap-1.5">
+                    <img src="/images/diamond-icon.png" alt="Diamond" className="h-4 w-4 rounded-xs object-cover inline-block shrink-0" />
+                    <span className="truncate">{order.gameName} - {order.packageName}</span>
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
@@ -651,7 +541,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
                   <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">PRICE</span>
-                  <span className="text-cyan-400 font-black">{order.price.toFixed(2)} USD</span>
+                  <span className="text-cyan-400 font-black">{Number(order.price || 0).toFixed(2)} USD</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-slate-800 text-xs">
                   <span className="text-slate-400 font-extrabold text-[10px] tracking-wider uppercase">TRANSACTION ID</span>
@@ -664,14 +554,23 @@ export default function CheckoutPage({ params }: { params: Promise<{ txnId: stri
                 សូមថតវិក្កយបត្រទុកដើម្បីផ្ទៀងផ្ទាត់
               </p>
 
-              {/* Download Button */}
-              <button
-                onClick={handleDownloadReceipt}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all active:scale-[0.99] min-h-[44px]"
-              >
-                <Download className="h-4 w-4" />
-                <span>Download Receipt</span>
-              </button>
+              {/* Buttons: Return to Home + Download Receipt */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Link
+                  href="/"
+                  className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all active:scale-[0.99] min-h-[44px]"
+                >
+                  <Home className="h-4 w-4" />
+                  <span>Return to Home / ត្រឡប់ទៅដើម</span>
+                </Link>
+                <button
+                  onClick={handleDownloadReceipt}
+                  className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-slate-700 shadow-md uppercase tracking-wider flex items-center justify-center space-x-2 transition-all active:scale-[0.99] min-h-[44px]"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Receipt</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

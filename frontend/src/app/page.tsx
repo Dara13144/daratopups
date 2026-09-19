@@ -30,7 +30,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [checkIdModalOpen, setCheckIdModalOpen] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // Auto slide banner with smooth animation every 4.5 seconds
   useEffect(() => {
@@ -181,20 +181,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Quick Check ID Feature Callout */}
-          <div className="flex items-center justify-center gap-2.5 mt-3 text-xs">
-            <button
-              type="button"
-              onClick={() => setCheckIdModalOpen(true)}
-              className="px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 hover:from-cyan-500/30 hover:to-purple-500/30 border border-cyan-500/40 text-cyan-300 font-bold flex items-center gap-2 shadow-lg shadow-cyan-500/10 transition-all cursor-pointer group"
-            >
-              <Sparkles className="h-4 w-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
-              <span>🔍 ពិនិត្យ ID & ឈ្មោះពិត MLBB & Free Fire (Live ID Check)</span>
-              <span className="text-[10px] bg-cyan-500 text-slate-950 px-2 py-0.5 rounded-full font-black">
-                ឥតគិតថ្លៃ
-              </span>
-            </button>
-          </div>
+
         </div>
 
         {/* 2-Row Animated Continuous Game Ticker */}
@@ -316,13 +303,13 @@ export default function Home() {
         )}
 
         {/* Main Game Catalog Grid */}
-        <div id="catalog" className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-8 shadow-2xl shadow-black/50 mb-6 sm:mb-12">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 sm:mb-6 border-b border-slate-800 pb-3 sm:pb-4">
-            <h2 className="text-white font-black text-base sm:text-xl uppercase tracking-wider flex items-center space-x-2">
+        <div id="catalog" className="bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl p-3.5 sm:p-8 shadow-xl shadow-pink-500/5 mb-6 sm:mb-12 transition-all">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 sm:mb-6 border-b border-slate-100 pb-3 sm:pb-4">
+            <h2 className="text-slate-900 font-black text-base sm:text-xl uppercase tracking-wider flex items-center space-x-2">
               <span className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-[#03c39a] shadow-[0_0_8px_#03c39a]"></span>
               <span className="truncate">{searchQuery ? `SEARCH: "${searchQuery}"` : 'CHOOSE SPECIAL GAMES'}</span>
             </h2>
-            <div className="self-start sm:self-auto bg-slate-950 text-slate-300 font-bold text-xs sm:text-sm px-3 sm:px-4 py-1 sm:py-1.5 rounded-full border border-slate-800 shadow-inner select-none">
+            <div className="self-start sm:self-auto bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm px-3 sm:px-4 py-1 sm:py-1.5 rounded-full border border-slate-200 shadow-inner select-none">
               {displayedProducts.length} of {products.length}
             </div>
           </div>
@@ -330,18 +317,18 @@ export default function Home() {
           {loading ? (
             <div className="grid grid-cols-2 min-[420px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4">
               {[...Array(12)].map((_, i) => (
-                <div key={i} className="h-44 sm:h-64 animate-pulse bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl"></div>
+                <div key={i} className="h-44 sm:h-64 animate-pulse bg-slate-100 border border-slate-200 rounded-xl sm:rounded-2xl"></div>
               ))}
             </div>
           ) : displayedProducts.length === 0 ? (
-            <div className="text-center py-12 sm:py-16 bg-slate-950 border border-slate-800 rounded-2xl px-4">
-              <Gamepad2 className="h-10 w-10 sm:h-12 sm:w-12 text-slate-500 mx-auto mb-3" />
-              <h3 className="text-white font-bold text-base sm:text-lg mb-1">{t.noProductsFound}</h3>
-              <p className="text-slate-400 text-xs sm:text-sm mb-4">{t.trySearchingElse}</p>
+            <div className="text-center py-12 sm:py-16 bg-slate-50 border border-slate-200 rounded-2xl px-4">
+              <Gamepad2 className="h-10 w-10 sm:h-12 sm:w-12 text-slate-400 mx-auto mb-3" />
+              <h3 className="text-slate-900 font-bold text-base sm:text-lg mb-1">{t.noProductsFound}</h3>
+              <p className="text-slate-500 text-xs sm:text-sm mb-4">{t.trySearchingElse}</p>
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold transition-all shadow-md shadow-pink-500/20 cursor-pointer"
                 >
                   Clear Search
                 </button>
@@ -357,37 +344,30 @@ export default function Home() {
                     <Link
                       key={product.id}
                       href={isOutOfStock ? '#' : `/games/${product.slug}`}
-                      className={`group relative overflow-hidden flex flex-col justify-between h-full bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl p-2 sm:p-3 transition-all duration-200 shadow-md ${
+                      className={`group relative overflow-hidden flex flex-col justify-between h-full bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-[#03c39a] rounded-xl sm:rounded-2xl p-2 sm:p-3 transition-all duration-200 shadow-sm hover:shadow-lg hover:shadow-[#03c39a]/15 hover:-translate-y-0.5 active:scale-[0.98] ${
                         isOutOfStock 
                           ? 'opacity-60 cursor-not-allowed' 
-                          : 'hover:border-[#03c39a] hover:shadow-lg hover:shadow-[#03c39a]/10 hover:-translate-y-0.5 active:scale-[0.98]'
+                          : ''
                       }`}
                       onClick={(e) => {
                         if (isOutOfStock) e.preventDefault();
                       }}
                     >
                       {/* Game Card image container */}
-                      <div className="relative aspect-square w-full bg-slate-900 rounded-lg sm:rounded-xl overflow-hidden border border-slate-800 mb-1.5 sm:mb-2">
+                      <div className="relative aspect-square w-full bg-slate-50 rounded-lg sm:rounded-xl overflow-hidden border border-slate-100 mb-1.5 sm:mb-2">
                         <GameIcon slug={product.slug} name={product.name} image={product.image} className="w-full h-full" />
                       </div>
 
                       {/* Game Name */}
-                      <h3 className="text-slate-100 font-extrabold text-[11px] sm:text-[13px] text-center tracking-tight line-clamp-1 mb-1.5 sm:mb-2 min-h-[18px] sm:min-h-[20px] flex items-center justify-center">
+                      <h3 className="text-slate-900 font-extrabold text-[11px] sm:text-[13px] text-center tracking-tight line-clamp-1 min-h-[18px] sm:min-h-[20px] flex items-center justify-center">
                         {product.name}
                       </h3>
 
-                      {/* Action Button */}
-                      <div className="mt-auto">
-                        {isOutOfStock ? (
-                          <div className="w-full py-1.5 sm:py-2 text-center text-[9px] sm:text-xs font-bold text-slate-500 bg-slate-900 rounded-md sm:rounded-lg select-none border border-slate-800">
-                            Out of stock
-                          </div>
-                        ) : (
-                          <div className="w-full py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-black uppercase text-slate-950 bg-[#03c39a] group-hover:bg-[#02b18b] rounded-md sm:rounded-lg transition-colors select-none shadow-sm">
-                            TOP UP
-                          </div>
-                        )}
-                      </div>
+                      {isOutOfStock && (
+                        <div className="mt-1.5 w-full py-1 text-center text-[9px] sm:text-xs font-bold text-red-500 bg-red-50 rounded-md select-none border border-red-200">
+                          {language === 'KH' ? 'អស់ពីស្តុក' : 'Out of stock'}
+                        </div>
+                      )}
                     </Link>
                   );
                 })}

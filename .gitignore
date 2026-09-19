@@ -17,11 +17,16 @@ backend/prisma/dev.db-journal
 
 # environment configurations
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+*.env
 backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+!frontend/.env.production
 
 # logs
 npm-debug.log*
@@ -34,3 +39,4 @@ yarn-error.log*
 Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
+scratch/

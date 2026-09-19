@@ -38,4 +38,4 @@ services:
       - key: NEXT_PUBLIC_BACKEND_URL
         value: https://nadybackend.onrender.com
       - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
-        value: "206329302084-7h656a65vmoeusu10c0cor9lvbp3042v.apps.googleusercontent.com"
+        value: "570013043660-p5uujjtc2sq24si85q3thmliqnf3s9uc.apps.googleusercontent.com"

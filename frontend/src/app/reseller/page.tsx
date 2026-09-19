@@ -23,18 +23,25 @@ import {
   Check,
   ShieldAlert,
 } from 'lucide-react';
-import { lookupPlayerProfile, PlayerProfile } from '../../lib/api';
+import { lookupPlayerProfile, PlayerProfile, fetchProviderProfile } from '../../lib/api';
 
 
 export default function ResellerPage() {
   const [monthlyVolume, setMonthlyVolume] = useState(500);
+  const [providerProfile, setProviderProfile] = useState<any>(null);
+
+  React.useEffect(() => {
+    fetchProviderProfile(2)
+      .then(setProviderProfile)
+      .catch(() => {});
+  }, []);
 
   // Profit calculation logic
   const calculatedDiscount = monthlyVolume >= 2000 ? 12 : monthlyVolume >= 1000 ? 8 : 5;
   const estimatedSavings = ((monthlyVolume * calculatedDiscount) / 100).toFixed(2);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white">
+    <div className="min-h-screen bg-transparent text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white">
       <Header />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 space-y-12">
@@ -69,6 +76,46 @@ export default function ResellerPage() {
                 <span>មើលបញ្ជីហ្គេមទាំងអស់</span>
                 <ArrowRight className="h-4 w-4" />
               </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* ══ LIVE RESELLER API GATEWAY STATUS BANNER ══ */}
+        <div className="rounded-3xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-pink-950/70 border border-pink-500/30 p-6 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3.5">
+              <div className="p-2.5 rounded-2xl bg-pink-500/20 text-pink-400 border border-pink-500/30 shrink-0">
+                <Zap className="h-6 w-6 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-lg sm:text-xl font-black text-white">ប្រព័ន្ធស្វ័យប្រវត្តិ VNGZZ2GAME API Gateway (Stock 2)</h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/30 flex items-center space-x-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span>ONLINE</span>
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  ភ្ជាប់ផ្ទាល់ជាមួយ <code className="text-pink-300 font-mono">https://www.vngzz2game.site/api/v1/game2/profile</code> សម្រាប់ពិនិត្យសមតុល្យ Reseller, ផ្ទៀងផ្ទាត់ ID 150+ ហ្គេម និងបញ្ជូនពេជ្រ Real-Time
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 bg-black/40 p-2 rounded-2xl border border-white/10 shrink-0">
+              <div className="px-3 py-1">
+                <span className="text-[10px] text-slate-400 block font-bold">API Profile</span>
+                <span className="text-xs font-mono font-black text-emerald-400">
+                  {providerProfile?.status || 'SUCCESS'}
+                </span>
+              </div>
+              {providerProfile?.user?.balance !== undefined && (
+                <div className="px-3 py-1 border-l border-white/10">
+                  <span className="text-[10px] text-slate-400 block font-bold">Live Wallet</span>
+                  <span className="text-xs font-mono font-black text-white">
+                    ${Number(providerProfile.user.balance).toFixed(2)} USD
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

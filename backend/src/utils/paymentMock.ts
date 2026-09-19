@@ -23,6 +23,8 @@ export interface BakongQRResponse {
   qrCode: string; // The raw KHQR string
   md5: string;    // MD5 of the QR code
   txnId: string;
+  merchantName?: string;
+  gatewayRef?: string;
 }
 
 /**
@@ -123,7 +125,7 @@ export async function generateBakongKHQR(
   console.log(`[Bakong KHQR Generator] Starting generation for Txn ID: "${tranId}", Amount: $${amountStr}, Item Name: "${itemName}"`);
 
   // ── 000. VNGZZ2GAME Live ABA KHQR Generator (https://www.vngzz2game.site) ─
-  const vngzzKey = process.env.VNGZZ2GAME_API_KEY || process.env.AUTO_TOPUP_API_KEY || 'pwArFcCneE0vcBDIGu6ZeIKHUZ3HxeQZ';
+  const vngzzKey = process.env.VNGZZ2GAME_API_KEY || process.env.AUTO_TOPUP_API_KEY || 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m';
   if (vngzzKey) {
     try {
       console.log(`[Bakong KHQR Generator] [VNGZZ2GAME] Requesting live ABA KHQR: $${amountStr}, Ref: ${tranId}`);
@@ -299,7 +301,7 @@ export async function generateBakongKHQR(
   const isRelay = token.startsWith('rbkn') || !!process.env.BAKONG_RELAY_TOKEN;
   const relayToken = isRelay ? token : '';
   const accountId  = (process.env.BAKONG_ACCOUNT_ID  || 'dara_mao1@bkrt').trim().replace(/['"]/g, '');
-  const merchantName = (process.env.BAKONG_MERCHANT_NAME || 'NA-DY TOPUP').trim().replace(/['"]/g, '');
+  const merchantName = (process.env.BAKONG_MERCHANT_NAME || 'NA-DY TOPUP ll').trim().replace(/['"]/g, '');
   const merchantCity = (process.env.BAKONG_MERCHANT_CITY || 'Phnom Penh').trim().replace(/['"]/g, '');
 
   if (relayToken) {
@@ -367,6 +369,7 @@ export async function generateBakongKHQR(
                   md5:    (detailsData.data.req_khqr.md5 || '').toLowerCase().trim(),
                   txnId:  tranId,
                   gatewayRef: sessionId,
+                  merchantName,
                 } as any;
               }
             }
@@ -408,6 +411,7 @@ export async function generateBakongKHQR(
             qrCode: resData.data.qr,
             md5:    resData.data.md5.toLowerCase().trim(),
             txnId:  tranId,
+            merchantName,
           };
         }
         console.warn('[Bakong KHQR Generator] Bakong Relay returned non-zero responseCode:', resData);
@@ -452,6 +456,7 @@ export async function generateBakongKHQR(
     qrCode: rawKHQR,
     md5,
     txnId: tranId,
+    merchantName,
   };
 }
 
@@ -478,7 +483,7 @@ export async function checkBakongPaymentStatus(
   }
 
   // ── 0000. VNGZZ2GAME Live Payment Status Check (https://www.vngzz2game.site) ──
-  const vngzzKey = process.env.VNGZZ2GAME_API_KEY || process.env.AUTO_TOPUP_API_KEY || 'pwArFcCneE0vcBDIGu6ZeIKHUZ3HxeQZ';
+  const vngzzKey = process.env.VNGZZ2GAME_API_KEY || process.env.AUTO_TOPUP_API_KEY || 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m';
   if (vngzzKey) {
     try {
       const order = await prisma.order.findFirst({

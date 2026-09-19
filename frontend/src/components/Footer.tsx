@@ -13,10 +13,19 @@ export default function Footer() {
       <footer className="mt-auto border-t border-pink-900/40 bg-[#1a0818]/95 backdrop-blur-md text-slate-300 pb-28 md:pb-12 pt-10 sm:pt-14 select-none">
         <div className="max-w-4xl mx-auto px-4 text-center">
           
-          {/* Main Brand Title */}
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black bg-gradient-to-r from-pink-400 via-rose-300 to-fuchsia-300 bg-clip-text text-transparent tracking-wider uppercase mb-2 sm:mb-3">
-            NA-DY TOPUP
-          </h2>
+          {/* Main Brand Logo & Title */}
+          <div className="flex flex-col items-center justify-center mb-3">
+            <div className="h-14 sm:h-16 w-20 sm:w-24 rounded-2xl overflow-hidden ring-2 ring-cyan-400/50 shadow-xl shadow-cyan-500/20 bg-slate-950/90 p-1 mb-2.5">
+              <img
+                src="/images/nady-logo.png"
+                alt="NADYTOPUP.SITE"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black bg-gradient-to-r from-cyan-300 via-sky-200 to-pink-300 bg-clip-text text-transparent tracking-wider uppercase">
+              NADYTOPUP.SITE
+            </h2>
+          </div>
 
           {/* Subtitle */}
           <p className="text-xs sm:text-sm text-pink-200/60 font-medium max-w-xl mx-auto mb-6 sm:mb-8 leading-relaxed">
@@ -97,7 +106,7 @@ export default function Footer() {
 
           {/* Copyright */}
           <p className="text-[11px] sm:text-xs text-slate-400 font-medium mb-6">
-            © {new Date().getFullYear()} NA-DY TOPUP. All rights reserved.
+            © {new Date().getFullYear()} NADYTOPUP.SITE. All rights reserved.
           </p>
 
           {/* Payment Badges (We accept: ABA | KHQR) */}

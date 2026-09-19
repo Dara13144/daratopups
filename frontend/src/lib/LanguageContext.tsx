@@ -5,6 +5,16 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 type Language = 'EN' | 'KH';
 
 interface Translations {
+  // Navigation
+  home: string;
+  contact: string;
+  faq: string;
+  updates: string;
+  trackOrder: string;
+  reseller: string;
+  creator: string;
+  checkIdTitle: string;
+
   // Header
   browseGames: string;
   myOrders: string;
@@ -87,6 +97,14 @@ interface Translations {
 
 const translations: Record<Language, Translations> = {
   EN: {
+    home: 'Home',
+    contact: 'Contact',
+    faq: 'FAQ',
+    updates: 'Updates',
+    trackOrder: 'Track Order',
+    reseller: 'Resellers',
+    creator: 'Creators',
+    checkIdTitle: 'Check ID',
     browseGames: 'Browse Games',
     myOrders: 'My Orders',
     adminDashboard: 'Admin Dashboard',
@@ -160,6 +178,14 @@ const translations: Record<Language, Translations> = {
     voucherNotice: 'Use this code inside the respective game store (Steam, Roblox, etc.) to redeem your wallet balance.',
   },
   KH: {
+    home: 'ទំព័រដើម',
+    contact: 'ទាក់ទង',
+    faq: 'សំណួរញឹកញាប់',
+    updates: 'ព័ត៌មានថ្មី',
+    trackOrder: 'តាមដានវិក្កយបត្រ',
+    reseller: 'តំណាងចែកចាយ',
+    creator: 'អ្នកបង្កើតមាតិកា',
+    checkIdTitle: 'ពិនិត្យ ID',
     browseGames: 'ស្វែងរកហ្គេម',
     myOrders: 'ការបញ្ជាទិញរបស់ខ្ញុំ',
     adminDashboard: 'ផ្ទាំងគ្រប់គ្រង',
@@ -246,12 +272,19 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>('KH');
 
   useEffect(() => {
-    setLanguageState('KH');
+    try {
+      const saved = localStorage.getItem('language') as Language;
+      if (saved === 'EN' || saved === 'KH') {
+        setLanguageState(saved);
+      }
+    } catch {}
   }, []);
 
   const setLanguage = (lang: Language) => {
-    setLanguageState('KH');
-    localStorage.setItem('language', 'KH');
+    setLanguageState(lang);
+    try {
+      localStorage.setItem('language', lang);
+    } catch {}
   };
 
   return (

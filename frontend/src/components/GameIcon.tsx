@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Gamepad2 } from 'lucide-react';
 import { getGameArtwork } from '../lib/gameArtworks';
-import { getApiBaseUrl } from '../lib/api';
+import { getApiBaseUrl, getProductImageUrl } from '../lib/api';
 
 interface GameIconProps {
   slug: string;
@@ -23,7 +23,13 @@ const GRADIENT_THEMES = [
 
 export default function GameIcon({ slug, name, image, className = 'w-full h-full' }: GameIconProps) {
   const [candidateIdx, setCandidateIdx] = useState(0);
-  const normalizedSlug = slug.toLowerCase();
+
+  // Automatically reset to highest priority candidate whenever the image prop changes (e.g. via Admin Dashboard or Realtime)
+  useEffect(() => {
+    setCandidateIdx(0);
+  }, [image, slug]);
+
+  const normalizedSlug = (slug || '').toLowerCase();
 
   // Known specific local assets
   let specificLocal = '';
@@ -62,14 +68,12 @@ export default function GameIcon({ slug, name, image, className = 'w-full h-full
   // Build ordered candidate list
   const candidates: string[] = [];
 
-  // 1. HIGHEST PRIORITY: Uploaded or explicitly configured game image (Supabase Storage / Server / External URL)
+  // 1. HIGHEST PRIORITY: Uploaded or explicitly configured game image (Admin Dashboard / Supabase Storage / Server / External URL)
   if (image && typeof image === 'string' && image.trim()) {
-    let cleanImg = image.trim();
-    if (cleanImg.startsWith('/uploads')) {
-      const serverBase = getApiBaseUrl().replace(/\/$/, '').replace(/\/api$/, '');
-      cleanImg = `${serverBase}${cleanImg}`;
+    const formatted = getProductImageUrl(image);
+    if (formatted) {
+      candidates.push(formatted);
     }
-    candidates.push(cleanImg);
   }
 
   // 2. Known specific local high-res artwork
@@ -149,9 +153,12 @@ export default function GameIcon({ slug, name, image, className = 'w-full h-full
         </span>
       </div>
 
-      {/* Bottom glowing accent bar */}
-      <div className="relative z-10 w-full h-1 rounded-full bg-slate-900 overflow-hidden">
-        <div className="h-full w-2/3 rounded-full" style={{ backgroundColor: theme.glow }} />
+      {/* Bottom glowing accent bar with crest */}
+      <div className="relative z-10 w-full flex items-center justify-between mt-auto">
+        <div className="h-1 w-1/2 rounded-full bg-slate-900 overflow-hidden">
+          <div className="h-full w-full" style={{ backgroundColor: theme.glow }} />
+        </div>
+        <img src="/images/nady-logo.png" alt="NADYTOPUP" className="h-3.5 w-auto object-contain opacity-80" />
       </div>
     </div>
   );

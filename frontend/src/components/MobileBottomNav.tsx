@@ -38,24 +38,22 @@ export default function MobileBottomNav() {
       isActive: pathname === '/#catalog' || pathname.startsWith('/games'),
     },
     {
-      label: 'Orders',
-      href: '/history',
-      icon: History,
-      isActive: pathname === '/history' || pathname.startsWith('/orders'),
-    },
-    {
       label: 'Support',
       href: 'https://t.me/darazzdev',
       icon: MessageCircle,
       isActive: false,
       isExternal: true,
     },
-    {
-      label: mounted && isAdmin ? 'Admin' : mounted && isLoggedIn ? 'Account' : 'Login',
-      href: mounted && isAdmin ? '/admin' : mounted && isLoggedIn ? '/history' : '/login',
-      icon: mounted && isAdmin ? ShieldCheck : User,
-      isActive: pathname === '/login' || pathname === '/admin',
-    },
+    ...(mounted && isAdmin
+      ? [
+          {
+            label: 'Admin',
+            href: '/admin',
+            icon: ShieldCheck,
+            isActive: pathname.startsWith('/admin'),
+          },
+        ]
+      : []),
   ];
 
   return (

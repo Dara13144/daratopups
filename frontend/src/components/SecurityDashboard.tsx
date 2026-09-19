@@ -446,7 +446,7 @@ export default function SecurityDashboard() {
       </div>
 
       {/* ─── SECURITY NAVIGATION SUB-TABS ──────────────────────────────────────── */}
-      <div className="flex border-b border-slate-800 space-x-2">
+      <div className="flex overflow-x-auto mobile-touch-scroll border-b border-slate-800 space-x-2 pb-0.5">
         {[
           { id: 'overview', label: 'Threat Overview' },
           { id: 'access', label: `IP Access Rules (${blocklist.length + allowlist.length})` },
@@ -456,7 +456,7 @@ export default function SecurityDashboard() {
           <button
             key={tab.id}
             onClick={() => setSecTab(tab.id as any)}
-            className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] ${
+            className={`px-4 py-2.5 text-xs font-bold transition-all border-b-2 -mb-[2px] shrink-0 active:scale-95 ${
               secTab === tab.id
                 ? 'border-cyan-500 text-cyan-400 bg-cyan-500/5'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -469,7 +469,7 @@ export default function SecurityDashboard() {
 
       {/* ─── SUB-TAB 1: THREAT OVERVIEW ────────────────────────────────────────── */}
       {secTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-admin-tab">
           {/* Threat Breakdown */}
           <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-4">
             <h4 className="text-xs font-black uppercase text-white tracking-wider">Mitigation Breakdown</h4>
@@ -563,7 +563,7 @@ export default function SecurityDashboard() {
 
       {/* ─── SUB-TAB 2: IP ACCESS RULES (BLOCKLIST & ALLOWLIST) ───────────────── */}
       {secTab === 'access' && (
-        <div className="space-y-5">
+        <div className="space-y-5 animate-admin-tab">
           {/* Quick Add Form */}
           <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800">
             <div className="flex items-center justify-between mb-3">
@@ -654,8 +654,8 @@ export default function SecurityDashboard() {
               </h4>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto mobile-touch-scroll">
+              <table className="w-full text-left text-xs min-w-[560px]">
                 <thead className="bg-slate-950/60 text-slate-500 font-bold border-b border-slate-800">
                   <tr>
                     <th className="px-4 py-3">IP Address</th>
@@ -717,7 +717,7 @@ export default function SecurityDashboard() {
 
       {/* ─── SUB-TAB 3: CONFIGURABLE RATE LIMITING & WAF ──────────────────────── */}
       {secTab === 'rules' && (
-        <form onSubmit={handleSaveConfig} className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-5">
+        <form onSubmit={handleSaveConfig} className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-5 animate-admin-tab">
           <div>
             <h4 className="text-xs font-black uppercase text-white tracking-wider">Rate Limiting & Threat Tuning</h4>
             <p className="text-xs text-slate-500 mt-0.5">Customize sliding window thresholds and automatic mitigation sensitivity.</p>
@@ -817,7 +817,7 @@ export default function SecurityDashboard() {
 
       {/* ─── SUB-TAB 4: LIVE INCIDENT LOGS ────────────────────────────────────── */}
       {secTab === 'logs' && (
-        <div className="rounded-2xl bg-slate-900/70 border border-slate-800 overflow-hidden space-y-0">
+        <div className="rounded-2xl bg-slate-900/70 border border-slate-800 overflow-hidden space-y-0 animate-admin-tab">
           {/* Header and Filter */}
           <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center space-x-2">
@@ -851,8 +851,8 @@ export default function SecurityDashboard() {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto mobile-touch-scroll max-h-[500px]">
+            <table className="w-full text-left text-xs min-w-[700px]">
               <thead className="bg-slate-950/80 text-slate-500 font-bold border-b border-slate-800 sticky top-0 z-10 backdrop-blur-sm">
                 <tr>
                   <th className="px-4 py-3">Timestamp</th>

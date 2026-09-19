@@ -14,9 +14,16 @@ interface CheckIdModalProps {
 }
 
 const SUPPORTED_GAMES = [
-  { slug: 'mobile-legend', name: 'Mobile Legends', icon: '/images/games/mlbb.png', hasZone: true, zoneLabel: 'Zone ID', placeholder: '1234' },
-  { slug: 'free-fire', name: 'Free Fire', icon: '/images/games/freefire.png', hasZone: false },
-  { slug: 'pubg-mobile', name: 'PUBG Mobile', icon: '/images/games/pubg.png', hasZone: false },
+  { slug: 'mobile-legends', name: 'Mobile Legends', icon: '/images/games/mlbb.png', hasZone: true, zoneLabel: 'Zone ID', placeholder: '1234' },
+  { slug: 'free-fire', name: 'Free Fire', icon: '/images/games/freefire.png', hasZone: false, placeholder: '12345678' },
+  { slug: 'telegram-premium', name: 'Telegram Premium', icon: '/images/games/telegram-premium.png', hasZone: false, placeholder: '@username' },
+  { slug: 'pubg-mobile', name: 'PUBG Mobile', icon: '/images/games/pubgm.png', hasZone: false, placeholder: '55443322' },
+  { slug: 'honor-of-kings', name: 'Honor of Kings', icon: '/images/games/hok.png', hasZone: false, placeholder: '12345678' },
+  { slug: 'genshin-impact', name: 'Genshin Impact', icon: '/images/games/genshin-impact.png', hasZone: false, placeholder: '800123456' },
+  { slug: 'roblox', name: 'Roblox', icon: '/images/games/roblox.png', hasZone: false, placeholder: 'Username' },
+  { slug: 'blood-strike', name: 'Blood Strike', icon: '/images/games/bloodstrike.png', hasZone: false, placeholder: '1234567' },
+  { slug: 'farlight-84', name: 'Farlight 84', icon: '/images/games/farlight.png', hasZone: false, placeholder: '12345678' },
+  { slug: 'valorant', name: 'Valorant', icon: '/images/games/valorant.png', hasZone: false, placeholder: 'Player#KH1' },
 ];
 
 export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
@@ -121,7 +128,7 @@ export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
           {/* Game Selection Tabs */}
           <div>
             <label className="block text-slate-300 text-xs font-bold mb-2">ជ្រើសរើសហ្គេម (Select Game):</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-[180px] overflow-y-auto pr-1">
               {SUPPORTED_GAMES.map((g) => (
                 <button
                   key={g.slug}
@@ -131,14 +138,14 @@ export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
                     setError('');
                     setProfile(null);
                   }}
-                  className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex flex-col items-center justify-center p-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
                     selectedGame.slug === g.slug
-                      ? 'bg-gradient-to-b from-cyan-500/20 to-blue-500/10 border-cyan-400 text-cyan-300 shadow-md shadow-cyan-500/10'
+                      ? 'bg-gradient-to-b from-cyan-500/25 to-blue-500/15 border-cyan-400 text-cyan-300 shadow-md shadow-cyan-500/20 ring-1 ring-cyan-400'
                       : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-850 hover:text-slate-200'
                   }`}
                 >
-                  <img src={g.icon} alt={g.name} className="h-8 w-8 rounded-xl object-contain mb-1.5 shadow-sm" />
-                  <span className="truncate w-full text-center">{g.name}</span>
+                  <img src={g.icon} alt={g.name} className="h-7 w-7 rounded-lg object-contain mb-1 shadow-sm" />
+                  <span className="truncate w-full text-center text-[10px] sm:text-[11px]">{g.name}</span>
                 </button>
               ))}
             </div>
@@ -148,12 +155,14 @@ export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
           <div className="space-y-3">
             <div>
               <label className="block text-slate-300 text-xs font-bold mb-1.5 flex justify-between">
-                <span>{selectedGame.name} User ID</span>
-                <span className="text-[10px] text-slate-500 font-normal">e.g. 1523754961</span>
+                <span>{selectedGame.slug === 'telegram-premium' ? 'Telegram Username' : `${selectedGame.name} User ID`}</span>
+                <span className="text-[10px] text-slate-500 font-normal">
+                  {selectedGame.slug === 'telegram-premium' ? 'e.g. @darazzdev' : 'e.g. 1523754961'}
+                </span>
               </label>
               <input
                 type="text"
-                placeholder="បញ្ចូល User ID (Player ID)"
+                placeholder={selectedGame.slug === 'telegram-premium' ? 'បញ្ចូល Telegram Username (ឧ. @username)' : 'បញ្ចូល User ID (Player ID)'}
                 value={playerId}
                 onChange={(e) => handlePlayerIdInput(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
@@ -176,6 +185,39 @@ export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
               </div>
             )}
           </div>
+
+          {/* Helper / Presets for Telegram Premium */}
+          {selectedGame.slug === 'telegram-premium' && (
+            <div className="space-y-2">
+              <div className="text-[11px] text-slate-400 bg-slate-950/60 border border-slate-800/80 rounded-xl p-2.5 flex items-start gap-2">
+                <Zap className="h-4 w-4 text-sky-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-sky-300 font-bold">របៀបមើល Telegram Username: </span>
+                  <span>បើក Telegram &rarr; Settings &rarr; មើលត្រង់ Username របស់អ្នក (ឧ. @darazzdev ឬបញ្ចូលដោយគ្មាន @)</span>
+                </div>
+              </div>
+
+              {/* Fast Test Samples */}
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                <span className="text-slate-500 font-semibold">គំរូសាកល្បង:</span>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPreset('darazzdev', '')}
+                  className="px-2 py-0.5 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 border border-sky-500/40 text-sky-300 text-[10px] font-mono cursor-pointer flex items-center gap-1"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-ping"></span>
+                  <span>@darazzdev (Live Real Name)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickPreset('telegram', '')}
+                  className="px-2 py-0.5 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-mono cursor-pointer"
+                >
+                  @telegram
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Helper / Presets for Free Fire */}
           {selectedGame.slug === 'free-fire' && (
@@ -292,8 +334,12 @@ export default function CheckIdModal({ isOpen, onClose }: CheckIdModalProps) {
                 <div className="relative shrink-0">
                   <img
                     src={profile.avatarUrl || selectedGame.icon}
-                    alt="Game Avatar"
-                    className="h-12 w-12 rounded-xl object-contain border-2 border-emerald-400/80 bg-slate-950 p-0.5"
+                    alt="User Photo"
+                    referrerPolicy="no-referrer"
+                    className="h-12 w-12 rounded-xl object-cover border-2 border-emerald-400/80 bg-slate-950 p-0.5"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = selectedGame.icon;
+                    }}
                   />
                   <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center">
                     <CheckCircle className="h-3 w-3 stroke-[3]" />

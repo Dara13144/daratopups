@@ -1,11 +1,12 @@
-const PRODUCTION_API = 'https://nadybackend.onrender.com';
+const LOCAL_API = 'http://localhost:5001';
+const PRODUCTION_API = 'https://kvmvddsbotnet.onrender.com';
 
 /**
  * Resolves the active backend API base URL.
  * Priority:
- * 1. Explicit NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL or VITE_API_URL
+ * 1. Explicit NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL or VITE_API_URL (if valid)
  * 2. In local browser environment (localhost / 127.0.0.1): http://localhost:5001
- * 3. In production environment (Vercel, Render, custom domain): https://nadybackend.onrender.com
+ * 3. In production environment: requires NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL to be set
  */
 export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -16,31 +17,43 @@ export function getApiBaseUrl(): string {
       hostname === '0.0.0.0' ||
       hostname.endsWith('.local');
 
-    // If visiting on a public domain, NEVER call localhost/127.0.0.1
-    // Doing so triggers the Chrome/Edge "Access other apps and services on this device" prompt!
-    if (!isLocalhost) {
+    // Always use localhost:5001 when running locally
+    if (isLocalhost) {
       const envUrl = (
         process.env.NEXT_PUBLIC_API_URL ||
         process.env.NEXT_PUBLIC_BACKEND_URL ||
         (typeof process !== 'undefined' && (process.env as any).VITE_API_URL)
       );
-
-      if (
-        envUrl &&
-        typeof envUrl === 'string' &&
-        envUrl.trim() &&
-        !envUrl.includes('localhost') &&
-        !envUrl.includes('127.0.0.1') &&
-        !envUrl.includes('0.0.0.0')
-      ) {
+      if (envUrl && typeof envUrl === 'string' && envUrl.trim() &&
+          (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
         return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
       }
-
-      return PRODUCTION_API;
+      return LOCAL_API;
     }
+
+    // If visiting on a public domain, NEVER call localhost/127.0.0.1
+    // Doing so triggers the Chrome/Edge "Access other apps and services on this device" prompt!
+    const envUrl = (
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      (typeof process !== 'undefined' && (process.env as any).VITE_API_URL)
+    );
+
+    if (
+      envUrl &&
+      typeof envUrl === 'string' &&
+      envUrl.trim() &&
+      !envUrl.includes('localhost') &&
+      !envUrl.includes('127.0.0.1') &&
+      !envUrl.includes('0.0.0.0')
+    ) {
+      return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
+    }
+
+    return PRODUCTION_API;
   }
 
-  // Local development environment:
+  // SSR / server-side: use env var or production
   const envUrl = (
     process.env.NEXT_PUBLIC_API_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
@@ -51,11 +64,33 @@ export function getApiBaseUrl(): string {
     return envUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 
-  return 'http://localhost:5001';
+  return PRODUCTION_API;
 }
 
 export const serverUrl = getApiBaseUrl();
 export const API_BASE = `${serverUrl}/api`;
+
+/**
+ * Normalizes and guarantees a valid absolute or relative URL for any product or package image.
+ * Seamlessly resolves /uploads/..., local /images/..., external HTTPS CDN, and Supabase Storage URLs.
+ */
+export function getProductImageUrl(img?: string | null): string {
+  if (!img || typeof img !== 'string' || !img.trim()) return '';
+  const trimmed = img.trim();
+  if (trimmed === 'undefined' || trimmed === 'null' || trimmed === 'none') return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/uploads')) {
+    const serverBase = getApiBaseUrl().replace(/\/$/, '').replace(/\/api$/, '');
+    return `${serverBase}${trimmed}`;
+  }
+  if (trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  const serverBase = getApiBaseUrl().replace(/\/$/, '').replace(/\/api$/, '');
+  return `${serverBase}/${trimmed}`;
+}
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.info(`[NaDyTopup] resolved serverUrl: "${serverUrl}" and API_BASE: "${API_BASE}"`);
@@ -63,8 +98,69 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 
 /**
  * Centralized, resilient API request helper.
+// ─── Sensitive Credential Redaction for Debugging Logs ────────────────────────
+const sanitizeClientLog = (data: any): any => {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(sanitizeClientLog);
+  const sensitiveKeys = ['password', 'currentpassword', 'newpassword', 'token', 'secret', 'jwt_secret', 'service_role_key', 'apikey', 'authorization', 'credential', 'privatekey', 'hash'];
+  const sanitized: Record<string, any> = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (sensitiveKeys.some((s) => key.toLowerCase().includes(s))) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof val === 'object' && val !== null) {
+      sanitized[key] = sanitizeClientLog(val);
+    } else {
+      sanitized[key] = val;
+    }
+  }
+  return sanitized;
+};
+
+/**
+ * Safely extracts backend response payload supporting all standard envelope structures:
+ * response?.data ?? response?.payload ?? response?.data?.data ?? response?.data?.payload ?? response
+ */
+export function extractApiData<T = any>(response: any): T {
+  if (!response || typeof response !== 'object') return response;
+  return (
+    response?.data?.data ??
+    response?.data?.payload ??
+    response?.data ??
+    response?.payload ??
+    response
+  );
+}
+
+function sanitizeClientLog(data: any): any {
+  if (!data) return data;
+  if (typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(sanitizeClientLog);
+  const sanitized: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    const lower = key.toLowerCase();
+    if (
+      lower.includes('password') ||
+      lower.includes('secret') ||
+      lower.includes('token') ||
+      lower.includes('apikey') ||
+      lower.includes('hash') ||
+      lower === 'authorization'
+    ) {
+      sanitized[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object') {
+      sanitized[key] = sanitizeClientLog(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+/**
+ * Centralized, resilient API request helper.
  * - Handles Authorization header automatically
  * - Retries seamlessly if local/remote fallback is needed in development
+ * - Development-only [API DEBUG] logging with credentials sanitized
  * - Parses true backend errors (400, 401, 403, 404, etc.) and surfaces actual message
  * - Replaces generic "Failed to fetch" with meaningful, actionable information
  */
@@ -83,11 +179,8 @@ export async function apiRequest<T = any>(
       window.location.hostname === '127.0.0.1';
 
     if (isLocal) {
-      if (!candidateBases.includes('http://localhost:5001')) {
-        candidateBases.unshift('http://localhost:5001');
-      }
-      if (!candidateBases.includes(PRODUCTION_API)) {
-        candidateBases.push(PRODUCTION_API);
+      if (!candidateBases.includes(LOCAL_API)) {
+        candidateBases.unshift(LOCAL_API);
       }
     }
   }
@@ -120,20 +213,42 @@ export async function apiRequest<T = any>(
       });
       clearTimeout(timeoutId);
 
+      const text = await res.text().catch(() => '');
+      let result: any;
+      try {
+        result = text ? JSON.parse(text) : {};
+      } catch {
+        result = text;
+      }
+
+      // Browser Debugging: Log every API call in development mode (redacting passwords & secrets)
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+        try {
+          console.group?.(`[API DEBUG] ${options.method || 'GET'} ${url}`);
+          console.log('URL:', url);
+          console.log('Method:', options.method || 'GET');
+          let parsedBody = null;
+          if (options.body && typeof options.body === 'string') {
+            try { parsedBody = JSON.parse(options.body); } catch { parsedBody = options.body; }
+          }
+          console.log('Request Payload:', sanitizeClientLog(parsedBody));
+          console.log('Status:', res.status);
+          console.log('Response:', sanitizeClientLog(result));
+          console.groupEnd?.();
+        } catch {}
+      }
+
       if (!res.ok) {
-        let errorMsg = `API ${res.status}: ${res.statusText || 'Error'}`;
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const errData = await res.json().catch(() => ({}));
-          errorMsg = errData.message || errData.error || errorMsg;
-        } else {
-          const txt = await res.text().catch(() => '');
-          if (txt && txt.length < 300) errorMsg = txt;
-        }
+        const errorMsg =
+          result?.message ||
+          result?.error?.message ||
+          (typeof result?.error === 'string' ? result.error : '') ||
+          (typeof text === 'string' && text.length < 300 ? text : `API request failed: ${res.status}`);
 
         const apiErr: any = new Error(errorMsg);
         apiErr.status = res.status;
         apiErr.response = res;
+        apiErr.data = result;
 
         // If client-side error (400, 401, 403, 404, 409, 422), do not fallback to another server.
         // Throw immediately with the REAL backend error!
@@ -145,11 +260,7 @@ export async function apiRequest<T = any>(
         continue;
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        return await res.json();
-      }
-      return (await res.text()) as any;
+      return result as T;
     } catch (err: any) {
       if (err.status && err.status >= 400 && err.status < 500) {
         throw err;
@@ -184,6 +295,8 @@ export interface GameProduct {
   isActive: boolean;
   hasZoneId?: boolean;
   zoneIdLabel?: string | null;
+  hasCheckId?: boolean;
+  checkIdGameCode?: string | null;
   packages: GamePackage[];
 }
 
@@ -238,9 +351,12 @@ export interface BakongPaymentDetails {
 }
 
 export interface OrderCreateResponse {
+  success?: boolean;
   message: string;
   order: OrderResponse;
   paymentDetails: ABAPaymentDetails | BakongPaymentDetails;
+  data?: any;
+  payload?: any;
 }
 
 export interface OrderStatusDetails {
@@ -343,9 +459,13 @@ export function getAuthHeaders(token?: string): Record<string, string> {
 export async function fetchProducts(): Promise<GameProduct[]> {
   // 1. Try Backend API (which queries Supabase PostgreSQL directly)
   try {
-    const data = await apiRequest<GameProduct[]>('/products');
-    if (Array.isArray(data)) {
+    const res = await apiRequest('/products');
+    const data = extractApiData<GameProduct[]>(res);
+    if (Array.isArray(data) && data.length > 0) {
       return data;
+    }
+    if (Array.isArray(res) && res.length > 0) {
+      return res;
     }
   } catch (err) {
     console.warn('[API] Live products API check failed, fetching from Supabase client direct:', err);
@@ -376,26 +496,32 @@ export async function fetchProducts(): Promise<GameProduct[]> {
 }
 
 /**
- * Loads products for the Admin Dashboard directly from Supabase (Single Source of Truth)
+ * Loads products for the Admin Dashboard (API first connected to DB, with Supabase direct fallback)
  */
 export async function fetchAdminProducts(): Promise<GameProduct[]> {
-  // 1. Direct Supabase Query First
+  // 1. Backend API (primary, connected directly to database via Prisma)
+  try {
+    const res = await apiRequest('/products');
+    const data = extractApiData<GameProduct[]>(res);
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
+    }
+    if (Array.isArray(res) && res.length > 0) {
+      return res;
+    }
+  } catch (apiErr) {
+    console.warn('[API] Backend products query warning, falling back to Supabase:', apiErr);
+  }
+
+  // 2. Fallback to Supabase direct query
   try {
     const { fetchGamesFromSupabase } = await import('./supabase');
     const sbGames = await fetchGamesFromSupabase();
-    if (Array.isArray(sbGames)) {
+    if (Array.isArray(sbGames) && sbGames.length > 0) {
       return sbGames;
     }
   } catch (err) {
-    console.warn('[API] Direct Supabase fetch warning, falling back to API:', err);
-  }
-
-  // 2. Fallback to backend API
-  try {
-    const data = await apiRequest<GameProduct[]>('/products');
-    if (Array.isArray(data)) return data;
-  } catch (apiErr) {
-    console.warn('[API] Fallback fetch products warning:', apiErr);
+    console.warn('[API] Direct Supabase fetch warning:', err);
   }
 
   return [];
@@ -404,7 +530,8 @@ export async function fetchAdminProducts(): Promise<GameProduct[]> {
 export async function fetchProduct(slug: string): Promise<GameProduct> {
   const cleanSlug = encodeURIComponent(slug.trim());
   try {
-    return await apiRequest<GameProduct>(`/products/${cleanSlug}`);
+    const res = await apiRequest<any>(`/products/${cleanSlug}`);
+    return extractApiData<GameProduct>(res);
   } catch (err: any) {
     // Direct Supabase Query Fallback if backend API is waking up or unavailable
     try {
@@ -430,6 +557,40 @@ export async function fetchProduct(slug: string): Promise<GameProduct> {
   }
 }
 
+export interface GameStock2Category {
+  game_code: string;
+  code: string;
+  name: string;
+  image_url: string;
+  description?: string;
+  need_server?: boolean;
+  fields?: string[];
+  provider?: string;
+  stock?: string;
+  display_name?: string;
+  variant_label?: string;
+  variant_flag?: string;
+}
+
+export async function fetchStock2Categories(): Promise<GameStock2Category[]> {
+  try {
+    const data = await apiRequest<{ status: string; categories: GameStock2Category[] }>('/products/stock2/categories');
+    if (data && data.categories && Array.isArray(data.categories)) {
+      return data.categories;
+    }
+  } catch (err) {
+    try {
+      const data = await apiRequest<{ status: string; categories: GameStock2Category[] }>('/v1/game2/categories');
+      if (data && data.categories && Array.isArray(data.categories)) {
+        return data.categories;
+      }
+    } catch (e) {
+      console.warn('[API] Stock 2 categories fetch warning:', e);
+    }
+  }
+  return [];
+}
+
 export interface PlayerProfile {
   success: boolean;
   nickname: string;
@@ -444,10 +605,25 @@ export interface PlayerProfile {
 export async function lookupPlayerProfile(
   gameSlug: string,
   playerId: string,
-  playerZoneId?: string
+  playerZoneId?: string,
+  checkIdGameCode?: string,
+  hasCheckId: boolean = true
 ): Promise<PlayerProfile> {
   let cleanId = (playerId || '').trim();
   let cleanZone = (playerZoneId || '').trim();
+
+  // If check ID verification is disabled for this game, return instant direct profile
+  if (hasCheckId === false) {
+    return {
+      success: true,
+      nickname: `Player_${cleanId.slice(-4) || 'Direct'}`,
+      playerId: cleanId,
+      playerZoneId: cleanZone || undefined,
+      region: 'Direct Recharge',
+      level: 1,
+      avatarUrl: `/images/games/${gameSlug}.png`,
+    };
+  }
 
   // Intelligent combined ID/Zone parsing (e.g. "1523754961 (11766)", "1523754961(11766)", "1523754961 11766")
   const comboMatch = cleanId.match(/^(\d{4,12})[\s_()\-]+(\d{3,6})\)?$/);
@@ -463,7 +639,7 @@ export async function lookupPlayerProfile(
     cleanZone = cleanZone.replace(/[()]/g, '').trim();
   }
 
-  const isMLBB = gameSlug.includes('mobile-legend') || gameSlug.includes('mlbb') || gameSlug.includes('moonton');
+  const isMLBB = gameSlug.includes('mobile-legend') || gameSlug.includes('mlbb') || gameSlug.includes('moonton') || checkIdGameCode === 'mlbb' || checkIdGameCode === 'mobile_legends';
   if (isMLBB) {
     cleanId = cleanId.replace(/[^\d]/g, '');
     cleanZone = cleanZone.replace(/[^\d]/g, '');
@@ -478,6 +654,8 @@ export async function lookupPlayerProfile(
     try {
       const q = new URLSearchParams({ gameSlug, playerId: cleanId });
       if (cleanZone) q.append('playerZoneId', cleanZone);
+      if (checkIdGameCode) q.append('checkIdGameCode', checkIdGameCode);
+      if (hasCheckId !== undefined) q.append('hasCheckId', String(hasCheckId));
 
       const ctrl = new AbortController();
       const tm = setTimeout(() => ctrl.abort(), 4000);
@@ -510,6 +688,8 @@ export async function lookupPlayerProfile(
   try {
     const query = new URLSearchParams({ playerId: cleanId });
     if (cleanZone) query.append('playerZoneId', cleanZone);
+    if (checkIdGameCode) query.append('checkIdGameCode', checkIdGameCode);
+    if (hasCheckId !== undefined) query.append('hasCheckId', String(hasCheckId));
 
     const data = await apiRequest<any>(`/products/lookup/${encodeURIComponent(gameSlug)}?${query.toString()}`);
 
@@ -592,7 +772,70 @@ export async function createOrder(
 }
 
 export async function getOrderStatus(txnId: string): Promise<OrderStatusDetails> {
-  return await apiRequest<OrderStatusDetails>(`/orders/status/${encodeURIComponent(txnId)}`);
+  const cleanTxnId = txnId.trim();
+  try {
+    const res = await apiRequest<any>(`/orders/status/${encodeURIComponent(cleanTxnId)}`);
+    return extractApiData<OrderStatusDetails>(res);
+  } catch (apiErr: any) {
+    if (apiErr.status === 404) {
+      throw apiErr;
+    }
+
+    // Direct Supabase Query Fallback when backend is waking up, restarting, or temporarily unreachable
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const { data: order, error } = await client
+        .from('Order')
+        .select('*, package:Package(*, product:Product(*))')
+        .eq('paymentTxnId', cleanTxnId)
+        .maybeSingle();
+
+      if (!error && order) {
+        const deepLink = order.paymentQrCode
+          ? `abamobilebank://ababank.com?type=payway&qrcode=${encodeURIComponent(order.paymentQrCode)}`
+          : null;
+        const payUrl =
+          order.gatewayRef && order.gatewayRef.startsWith('TXN-')
+            ? `https://www.vngzz2game.site/pay/${order.gatewayRef}`
+            : null;
+        const qrImageUrl = order.paymentQrCode
+          ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(
+              order.paymentQrCode
+            )}`
+          : null;
+
+        return {
+          id: order.id,
+          paymentTxnId: order.paymentTxnId,
+          gameName: order.package?.product?.name || 'Game Topup',
+          gameSlug: order.package?.product?.slug || '',
+          packageName: order.package?.name || '',
+          playerId: order.playerId,
+          playerZoneId: order.playerZoneId || null,
+          playerNickname: order.playerNickname,
+          price: order.price,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod,
+          stockDeliveredCode: order.stockDeliveredCode,
+          paymentQrCode: order.paymentQrCode,
+          paymentMd5: order.paymentMd5,
+          deepLink,
+          payUrl,
+          qrImageUrl,
+          createdAt: order.createdAt,
+          merchantName: 'NA-DY TOPUP ll',
+          abaPayload: null,
+          abaApiUrl: null,
+        };
+      }
+    } catch (fallbackErr) {
+      console.warn('[API] Direct Supabase order status query notice:', fallbackErr);
+    }
+
+    throw apiErr;
+  }
 }
 
 export async function verifyPayment(txnId: string): Promise<{
@@ -604,13 +847,86 @@ export async function verifyPayment(txnId: string): Promise<{
   message?: string;
   error?: string;
 }> {
-  return await apiRequest(`/orders/verify/${encodeURIComponent(txnId)}`, {
-    method: 'POST',
-  });
+  try {
+    return await apiRequest(`/orders/verify/${encodeURIComponent(txnId)}`, {
+      method: 'POST',
+    });
+  } catch (err: any) {
+    // If backend is waking up, check live order in Supabase directly
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const { data: order } = await client
+        .from('Order')
+        .select('status, paymentStatus, stockDeliveredCode')
+        .eq('paymentTxnId', txnId.trim())
+        .maybeSingle();
+
+      if (order && (order.status === 'COMPLETED' || order.paymentStatus === 'PAID')) {
+        return {
+          verified: true,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          deliverySuccess: true,
+          deliveredCode: order.stockDeliveredCode,
+          message: 'Payment confirmed successfully',
+        };
+      }
+    } catch {}
+
+    throw err;
+  }
 }
 
 export async function fetchOrderHistory(emailOrId: string): Promise<OrderStatusDetails[]> {
-  return await apiRequest<OrderStatusDetails[]>(`/orders/history/${encodeURIComponent(emailOrId)}`);
+  try {
+    const res = await apiRequest<any>(`/orders/history/${encodeURIComponent(emailOrId)}`);
+    const data = extractApiData<OrderStatusDetails[]>(res);
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (Array.isArray(res)) {
+      return res;
+    }
+    return [];
+  } catch (err: any) {
+    // Supabase fallback query
+    try {
+      const { getSupabaseClient } = await import('./supabase');
+      const client = getSupabaseClient();
+      const cleanTarget = emailOrId.trim();
+      const { data: orders, error } = await client
+        .from('Order')
+        .select('*, package:Package(*, product:Product(*))')
+        .or(`playerId.eq.${cleanTarget},paymentTxnId.eq.${cleanTarget}`)
+        .order('createdAt', { ascending: false })
+        .limit(20);
+
+      if (!error && Array.isArray(orders)) {
+        return orders.map((order: any) => ({
+          id: order.id,
+          paymentTxnId: order.paymentTxnId,
+          gameName: order.package?.product?.name || 'Game Topup',
+          gameSlug: order.package?.product?.slug || '',
+          packageName: order.package?.name || '',
+          playerId: order.playerId,
+          playerZoneId: order.playerZoneId || null,
+          playerNickname: order.playerNickname,
+          price: order.price,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod,
+          stockDeliveredCode: order.stockDeliveredCode,
+          paymentQrCode: order.paymentQrCode,
+          paymentMd5: order.paymentMd5,
+          createdAt: order.createdAt,
+          merchantName: 'NA-DY TOPUP ll',
+        }));
+      }
+    } catch {}
+
+    throw err;
+  }
 }
 
 // Authentication
@@ -663,7 +979,8 @@ export async function simulatePaymentCallback(txnId: string, status: 'PAID' | 'F
 
 // Admin Panel Requests
 export async function fetchAdminStats() {
-  return await apiRequest('/admin/stats');
+  const res = await apiRequest('/admin/stats');
+  return extractApiData(res);
 }
 
 export async function fetchAdminOrders(status?: string, search?: string) {
@@ -671,7 +988,9 @@ export async function fetchAdminOrders(status?: string, search?: string) {
   if (status) params.append('status', status);
   if (search) params.append('search', search);
   const queryStr = params.toString() ? `?${params.toString()}` : '';
-  return await apiRequest(`/admin/orders${queryStr}`);
+  const res = await apiRequest(`/admin/orders${queryStr}`);
+  const data = extractApiData(res);
+  return Array.isArray(data) ? data : (Array.isArray(res) ? res : []);
 }
 
 export async function updateAdminOrderStatus(id: string, status: string, code?: string) {
@@ -728,12 +1047,14 @@ export async function addAdminProduct(
   packages?: any[],
   autoSeedPackages: boolean = true,
   hasZoneId: boolean = false,
-  zoneIdLabel?: string
+  zoneIdLabel?: string,
+  hasCheckId: boolean = true,
+  checkIdGameCode?: string
 ) {
   try {
     return await apiRequest('/admin/products', {
       method: 'POST',
-      body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages, hasZoneId, zoneIdLabel }),
+      body: JSON.stringify({ name, category, image, slug, packages, autoSeedPackages, hasZoneId, zoneIdLabel, hasCheckId, checkIdGameCode }),
     });
   } catch (err: any) {
     // Direct Supabase Fallback if backend API is offline
@@ -814,7 +1135,7 @@ export async function addAdminPackage(
   });
 }
 
-export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string; hasZoneId?: boolean; zoneIdLabel?: string | null }) {
+export async function updateAdminProduct(id: string, data: { name?: string; category?: string; image?: string; isActive?: boolean; slug?: string; hasZoneId?: boolean; zoneIdLabel?: string | null; hasCheckId?: boolean; checkIdGameCode?: string | null }) {
   const cleanId = encodeURIComponent(id.trim());
   return await apiRequest(`/admin/products/${cleanId}`, {
     method: 'PATCH',
@@ -1195,6 +1516,273 @@ export async function deleteAdminContactMessage(id: string) {
     method: 'DELETE',
   });
 }
+
+// ─── VNGZZ2GAME Provider Gateway API Helpers (/api/v1/game/* & /api/v1/game2/*) ──
+
+export interface ProviderProfile {
+  status: string;
+  user?: {
+    id?: string;
+    username?: string;
+    balance?: number;
+    currency?: string;
+    role?: string;
+    status?: string;
+    total_orders?: number;
+    total_spent?: number;
+  };
+  gateway?: {
+    provider?: string;
+    master_status?: string;
+    stock?: number;
+  };
+}
+
+export interface ProviderCheckIdResult {
+  status: string;
+  valid?: boolean;
+  username?: string;
+  region?: string;
+  game_title?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface ProviderDepositResult {
+  success?: boolean;
+  status?: string | number;
+  message?: string;
+  data?: {
+    transaction_id?: string;
+    target_wallet?: string;
+    amount?: number | string;
+    currency?: string;
+    state?: string;
+    qr_string?: string;
+    qr_image?: string;
+    qr_image_url?: string;
+    pay_url?: string;
+    abamobile_deeplink?: string;
+    expire_in_sec?: number;
+    current_balance?: number;
+  };
+  qr_image_url?: string;
+  qr_png_url?: string;
+  deep_link?: string;
+  pay_url?: string;
+}
+
+export async function fetchProviderProfile(stock: 1 | 2 = 1): Promise<ProviderProfile> {
+  const url = stock === 2 ? '/api/v1/game2/profile' : '/api/v1/game/profile';
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    },
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error(`Provider profile error (${res.status})`);
+  return await res.json();
+}
+
+export async function checkPlayerIdViaProvider(
+  game: string,
+  userid: string,
+  zoneid?: string,
+  stock: 1 | 2 = 1
+): Promise<ProviderCheckIdResult> {
+  const base = stock === 2 ? '/api/v1/game2/check_id' : '/api/v1/game/check_id';
+  const q = new URLSearchParams({
+    game: game.trim(),
+    userid: userid.trim()
+  });
+  if (zoneid) {
+    q.append('zone_id', zoneid.trim());
+    q.append('serverid', zoneid.trim());
+  }
+  const res = await fetch(`${base}?${q.toString()}`, {
+    headers: {
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    }
+  });
+  return await res.json();
+}
+
+export async function fetchProviderCategories(stock: 1 | 2 = 1): Promise<any> {
+  const url = stock === 2 ? '/api/v1/game2/categories' : '/api/v1/game/categories';
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    }
+  });
+  if (!res.ok) throw new Error(`Failed to fetch categories (${res.status})`);
+  return await res.json();
+}
+
+export async function fetchProviderProducts(gameCode: string, stock: 1 | 2 = 1): Promise<any> {
+  const url = stock === 2
+    ? `/api/v1/game2/products?game_code=${encodeURIComponent(gameCode)}`
+    : `/api/v1/game/products?game_code=${encodeURIComponent(gameCode)}`;
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    }
+  });
+  if (!res.ok) throw new Error(`Failed to fetch products (${res.status})`);
+  return await res.json();
+}
+
+export async function createProviderOrder(payload: {
+  product_code: string;
+  game_user_id: string;
+  reference: string;
+  server_id?: string;
+  zone_id?: string;
+  stock?: 1 | 2;
+}): Promise<any> {
+  const url = (payload.stock || 1) === 2 ? '/api/v1/game2/create_order' : '/api/v1/game/create_order';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    },
+    body: JSON.stringify({
+      product_code: payload.product_code,
+      game_user_id: payload.game_user_id,
+      reference: payload.reference,
+      server_id: payload.server_id || payload.zone_id,
+      zone_id: payload.zone_id || payload.server_id,
+    })
+  });
+  return await res.json();
+}
+
+export async function checkProviderOrder(reference: string, stock: 1 | 2 = 1): Promise<any> {
+  const url = stock === 2
+    ? `/api/v1/game2/check_order?reference=${encodeURIComponent(reference)}`
+    : `/api/v1/game/check_order?reference=${encodeURIComponent(reference)}`;
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    }
+  });
+  return await res.json();
+}
+
+export async function depositProviderBalance(amount: number, currency = 'USD', stock: 1 | 2 = 1): Promise<ProviderDepositResult> {
+  const url = stock === 2 ? '/api/v1/game2/deposit' : '/api/v1/game/deposit';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-API-Key': 'pwS5VEcfOkcN7skP5TRuWdUDdS9ZqG9m'
+    },
+    body: JSON.stringify({ amount, currency })
+  });
+  return await res.json();
+}
+
+// ─── Dynamic API & Provider Settings Management ───────────────────
+export interface DynamicApiSettings {
+  providerApiKey: string;
+  providerStock1Url: string;
+  providerStock2Url: string;
+  providerV2Url: string;
+  providerActiveStock: 1 | 2;
+  providerActiveUrl: string;
+  providerAutoDelivery: boolean;
+  bakongMerchantName: string;
+  bakongAccountId: string;
+  updatedAt?: string;
+}
+
+export interface ApiPreset {
+  name: string;
+  url: string;
+  stock: 1 | 2;
+  description?: string;
+  desc?: string;
+  badge?: string;
+}
+
+export interface FetchApiSettingsResponse {
+  success: boolean;
+  settings: DynamicApiSettings;
+  presets: ApiPreset[];
+}
+
+export async function fetchAdminApiSettings(): Promise<FetchApiSettingsResponse> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/api/admin/settings/api`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error(`Failed to fetch API settings (${res.status})`);
+  return await res.json();
+}
+
+export async function updateAdminApiSettings(settings: Partial<DynamicApiSettings>): Promise<any> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/api/admin/settings/api`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(settings)
+  });
+  if (!res.ok) throw new Error(`Failed to update API settings (${res.status})`);
+  return await res.json();
+}
+
+export async function testAdminApiConnection(providerApiKey?: string, providerActiveUrl?: string): Promise<{
+  success: boolean;
+  status: number;
+  latencyMs: number;
+  message: string;
+  data?: any;
+}> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/api/admin/settings/api/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify({ providerApiKey, providerActiveUrl })
+  });
+  if (!res.ok) throw new Error(`API test failed (${res.status})`);
+  return await res.json();
+}
+
+export async function resetAdminApiSettings(): Promise<any> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const base = getApiBaseUrl();
+  const res = await fetch(`${base}/api/admin/settings/api/reset`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) throw new Error(`Failed to reset API settings (${res.status})`);
+  return await res.json();
+}
+
+
 
 
 

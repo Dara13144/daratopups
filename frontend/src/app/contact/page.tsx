@@ -133,7 +133,7 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d020d] text-slate-100 selection:bg-pink-500 selection:text-white pb-24 pt-6">
+    <div className="min-h-screen bg-transparent text-slate-100 selection:bg-pink-500 selection:text-white pb-24 pt-6">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         
         {/* Breadcrumb & Navigation */}

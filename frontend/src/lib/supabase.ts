@@ -2,12 +2,20 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://ueziueclbgymbynuxpby.supabase.co';
+  'https://fnekziuyloncrsgqxcbq.supabase.co';
+
+export const SUPABASE_AUTH_ENDPOINTS = {
+  callbackUrl: 'https://fnekziuyloncrsgqxcbq.supabase.co/auth/v1/callback',
+  authorizeUrl: 'https://fnekziuyloncrsgqxcbq.supabase.co/auth/v1/oauth/authorize',
+  tokenUrl: 'https://fnekziuyloncrsgqxcbq.supabase.co/auth/v1/oauth/token',
+  jwksUrl: 'https://fnekziuyloncrsgqxcbq.supabase.co/auth/v1/.well-known/jwks.json',
+  openidConfigUrl: 'https://fnekziuyloncrsgqxcbq.supabase.co/auth/v1/.well-known/openid-configuration',
+};
 
 const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  'sb_publishable_jIdjx8vma3dtMGCMwlizMA__G9TpoAi';
+  '';
 
 // Create a robust singleton Supabase Client
 let supabaseInstance: SupabaseClient | null = null;
@@ -271,21 +279,26 @@ export async function deleteGameFromSupabase(id: string): Promise<boolean> {
  * Direct fetch of all games and packages from Supabase (Single Source of Truth)
  */
 export async function fetchGamesFromSupabase(): Promise<any[]> {
-  const client = getSupabaseClient();
-  const { data, error } = await client
-    .from('Product')
-    .select('*, packages:Package(*)')
-    .order('name', { ascending: true });
+  try {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('Product')
+      .select('*, packages:Package(*)')
+      .order('name', { ascending: true });
 
-  if (error) {
-    console.error('[Supabase] Failed to load games from Supabase:', error);
-    throw error;
+    if (error) {
+      console.warn('[Supabase] Note on loading games from Supabase:', error?.message || error);
+      return [];
+    }
+
+    return (data || []).map((p: any) => ({
+      ...p,
+      packages: (p.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
+    }));
+  } catch (err: any) {
+    console.warn('[Supabase] fetchGamesFromSupabase note:', err?.message || err);
+    return [];
   }
-
-  return (data || []).map((p: any) => ({
-    ...p,
-    packages: (p.packages || []).sort((a: any, b: any) => (a.price || 0) - (b.price || 0)),
-  }));
 }
 
 /**

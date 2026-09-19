@@ -11,8 +11,9 @@ import {
   restoreAdminBackup, deleteAdminSnapshot,
   fetchAdminContactMessages, updateAdminContactMessage, deleteAdminContactMessage,
   ContactMessageItem,
-  serverUrl, API_BASE, verifyPayment, getAuthToken, getAuthHeaders,
-  autoVerifyAllAdminOrders, autoFulfillAdminOrder
+  serverUrl, API_BASE, verifyPayment, getAuthToken, getAuthHeaders, getProductImageUrl,
+  autoVerifyAllAdminOrders, autoFulfillAdminOrder,
+  fetchProviderProfile, ProviderProfile
 } from '../../lib/api';
 import { subscribeToContactMessagesRealtime, subscribeToAllRealtime } from '../../lib/supabase';
 import {
@@ -20,15 +21,17 @@ import {
   Search, Trash2, Gem, LogOut, Image as ImageIcon, Upload, Package,
   ChevronRight, BarChart3, X, AlertCircle, Zap, Star, DollarSign,
   HardDrive, Download, ShieldCheck, History, RotateCcw, FileText, Check,
-  Pencil, Edit, Eye, EyeOff, SlidersHorizontal, Menu, MessageSquare, Send, Mail, Phone
+  Pencil, Edit, Eye, EyeOff, SlidersHorizontal, Menu, MessageSquare, Send, Mail, Phone, Wallet, Key
 } from 'lucide-react';
 import SecurityDashboard from '../../components/SecurityDashboard';
+import ProviderGatewayDashboard from '../../components/ProviderGatewayDashboard';
+import ApiSettingsDashboard from '../../components/ApiSettingsDashboard';
 
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'products' | 'diamonds' | 'contact' | 'backup' | 'security'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'orders' | 'products' | 'diamonds' | 'gateway' | 'apisettings' | 'contact' | 'backup' | 'security'>('metrics');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -55,6 +58,9 @@ export default function AdminDashboard() {
   const [newProductImage, setNewProductImage] = useState('');
   const [newProductHasZone, setNewProductHasZone] = useState(false);
   const [newProductZoneLabel, setNewProductZoneLabel] = useState('Zone ID');
+  const [newProductHasCheckId, setNewProductHasCheckId] = useState(true);
+  const [newProductCheckCode, setNewProductCheckCode] = useState('');
+  const [newProductCustomCode, setNewProductCustomCode] = useState('');
   const [productImageFile, setProductImageFile] = useState<File | null>(null);
   const [productImagePreview, setProductImagePreview] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -82,6 +88,7 @@ export default function AdminDashboard() {
   const [success, setSuccess] = useState('');
   const [promptCode, setPromptCode] = useState('');
   const [activePromptOrderId, setActivePromptOrderId] = useState<string | null>(null);
+  const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
 
   // Auto Orders System States
   const [autoSyncOrders, setAutoSyncOrders] = useState(true);
@@ -97,6 +104,9 @@ export default function AdminDashboard() {
   const [editProdIsActive, setEditProdIsActive] = useState(true);
   const [editProdHasZone, setEditProdHasZone] = useState(false);
   const [editProdZoneLabel, setEditProdZoneLabel] = useState('Zone ID');
+  const [editProdHasCheckId, setEditProdHasCheckId] = useState(true);
+  const [editProdCheckCode, setEditProdCheckCode] = useState('');
+  const [editProdCustomCode, setEditProdCustomCode] = useState('');
   const [editProdModalFile, setEditProdModalFile] = useState<File | null>(null);
   const [editProdModalPreview, setEditProdModalPreview] = useState('');
   const editProdModalFileInputRef = useRef<HTMLInputElement>(null);
@@ -179,6 +189,12 @@ export default function AdminDashboard() {
     setEditProdIsActive(prod.isActive !== false);
     setEditProdHasZone(!!prod.hasZoneId);
     setEditProdZoneLabel(prod.zoneIdLabel || 'Zone ID');
+    const code = prod.checkIdGameCode || '';
+    const knownPresets = ['', 'mlbb', 'freefire', 'pubgm', 'genshin', 'hok', 'blood_strike', 'farlight84', 'roblox', 'valorant', 'telegram'];
+    const isCustom = code && !knownPresets.includes(code);
+    setEditProdHasCheckId(prod.hasCheckId !== false);
+    setEditProdCheckCode(isCustom ? 'custom' : code);
+    setEditProdCustomCode(isCustom ? code : '');
     setEditProdModalFile(null);
     setEditProdModalPreview('');
   };
@@ -192,6 +208,10 @@ export default function AdminDashboard() {
       if (editProdModalFile) {
         finalImg = await uploadImageToServer(editProdModalFile);
       }
+      const finalCheckCode = editProdCheckCode === 'custom'
+        ? editProdCustomCode.trim()
+        : editProdCheckCode.trim();
+
       await updateAdminProduct(editingProductModal.id, {
         name: editProdName,
         category: editProdCategory,
@@ -200,6 +220,8 @@ export default function AdminDashboard() {
         isActive: editProdIsActive,
         hasZoneId: editProdHasZone,
         zoneIdLabel: editProdHasZone ? editProdZoneLabel : null,
+        hasCheckId: editProdHasCheckId,
+        checkIdGameCode: editProdHasCheckId ? (finalCheckCode || null) : null,
       });
       setSuccess(`Product "${editProdName}" updated successfully!`);
       setEditingProductModal(null);
@@ -465,6 +487,7 @@ export default function AdminDashboard() {
       const prodRes = await fetchAdminProducts(); setAllProducts(prodRes);
       await loadSnapshots();
       await loadContactMessages();
+      fetchProviderProfile(2).then(setProviderProfile).catch(() => {});
       if (prodRes.length > 0) {
         setSelectedProductId(prodRes[0].id);
       }
@@ -491,8 +514,8 @@ export default function AdminDashboard() {
 
     const verifyAuth = async () => {
       let token = getAuthToken();
-      const adminEmails = ['mdara9695@gmail.com', 'admin@nadytopup.com', 'admin@topup.com', 'admin@gmail.com'];
-      const email = typeof window !== 'undefined' ? localStorage.getItem('user_email') : null;
+      const adminEmails = ['mdara9695@gmail.com'];
+      const email = typeof window !== 'undefined' ? (localStorage.getItem('user_email') || '').toLowerCase().trim() : '';
       let role = typeof window !== 'undefined' ? localStorage.getItem('user_role') : null;
 
       // 1. If no token in localStorage, try recovering from active Supabase session
@@ -503,12 +526,17 @@ export default function AdminDashboard() {
           if (session?.access_token) {
             token = session.access_token;
             localStorage.setItem('token', token);
-            localStorage.setItem('admin_token', token);
-            if (session.user?.email) {
-              localStorage.setItem('user_email', session.user.email);
-              if (adminEmails.includes(session.user.email.toLowerCase())) {
+            const sessEmail = (session.user?.email || '').toLowerCase().trim();
+            if (sessEmail) {
+              localStorage.setItem('user_email', sessEmail);
+              if (sessEmail === 'mdara9695@gmail.com') {
                 role = 'ADMIN';
+                localStorage.setItem('admin_token', token);
                 localStorage.setItem('user_role', 'ADMIN');
+              } else {
+                role = 'USER';
+                localStorage.setItem('user_role', 'USER');
+                localStorage.removeItem('admin_token');
               }
             }
           }
@@ -517,17 +545,18 @@ export default function AdminDashboard() {
         }
       }
 
-      // Check admin eligibility
-      const isEligibleAdmin = (role === 'ADMIN') || (email && adminEmails.includes(email.toLowerCase()));
+      // Check admin eligibility: STRICTLY ONLY mdara9695@gmail.com
+      const isEligibleAdmin = email === 'mdara9695@gmail.com' && (role === 'ADMIN' || adminEmails.includes(email));
 
       if (!token || !isEligibleAdmin) {
         if (active) {
+          localStorage.removeItem('admin_token');
           router.push('/login?redirect=/admin');
         }
         return;
       }
 
-      if (email && adminEmails.includes(email.toLowerCase()) && role !== 'ADMIN') {
+      if (email === 'mdara9695@gmail.com' && role !== 'ADMIN') {
         localStorage.setItem('user_role', 'ADMIN');
       }
 
@@ -687,6 +716,10 @@ export default function AdminDashboard() {
     try {
       let imageUrl = newProductImage;
       if (productImageFile) imageUrl = await uploadImageToServer(productImageFile);
+      const finalCheckCode = newProductCheckCode === 'custom'
+        ? newProductCustomCode.trim()
+        : newProductCheckCode.trim();
+
       const res = await addAdminProduct(
         newProductName.trim(),
         newProductCategory,
@@ -695,13 +728,16 @@ export default function AdminDashboard() {
         undefined,
         autoSeedPackages,
         newProductHasZone,
-        newProductHasZone ? newProductZoneLabel : undefined
+        newProductHasZone ? newProductZoneLabel : undefined,
+        newProductHasCheckId,
+        newProductHasCheckId ? (finalCheckCode || undefined) : undefined
       );
       const createdProd = res.product;
       const gameTitle = createdProd?.name || newProductName;
       setSuccess(`Game "${gameTitle}" created successfully with ${createdProd?.packages?.length || 6} top-up packages!`);
       setNewProductName(''); setNewProductSlug(''); setNewProductImage(''); setProductImageFile(null); setProductImagePreview('');
       setNewProductHasZone(false); setNewProductZoneLabel('Zone ID');
+      setNewProductHasCheckId(true); setNewProductCheckCode(''); setNewProductCustomCode('');
       await loadAllData();
       if (createdProd?.id) {
         setSelectedProductId(createdProd.id);
@@ -857,32 +893,30 @@ export default function AdminDashboard() {
 
   const getStatusBadge = (status: string) => {
     const b = 'inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border';
-    if (status === 'COMPLETED' || status === 'SUCCESS') return <span className={`${b} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`}>✓ SUCCESS</span>;
-    if (status === 'PENDING') return <span className={`${b} bg-amber-500/10 text-amber-400 border-amber-500/20`}>⏳ PENDING</span>;
-    if (status === 'PROCESSING') return <span className={`${b} bg-cyan-500/10 text-cyan-400 border-cyan-500/20`}>⚡ PROCESS</span>;
+    const s = (status || '').toUpperCase();
+    if (s === 'COMPLETED' || s === 'SUCCESS' || s === 'PAID') return <span className={`${b} bg-emerald-500/10 text-emerald-400 border-emerald-500/20`}>✓ COMPLETED</span>;
+    if (s === 'PENDING') return <span className={`${b} bg-amber-500/10 text-amber-400 border-amber-500/20`}>⏳ PENDING</span>;
+    if (s === 'PROCESSING' || s === 'WAITING') return <span className={`${b} bg-cyan-500/10 text-cyan-400 border-cyan-500/20`}>⚡ PROCESSING</span>;
+    if (s === 'CANCELLED') return <span className={`${b} bg-slate-500/10 text-slate-400 border-slate-500/20`}>✗ CANCELLED</span>;
     return <span className={`${b} bg-red-500/10 text-red-400 border-red-500/20`}>✗ FAILED</span>;
   };
 
   const getProductImgSrc = (img?: string | null) => {
     if (!img) return 'https://placehold.co/48x48/1e293b/94a3b8?text=IMG';
-    if (img.startsWith('http') || img.startsWith('blob')) return img;
-    if (img.startsWith('/uploads')) return `${API_BASE.replace(/\/api$/, '')}${img}`;
-    if (img.startsWith('/')) return img;
-    return `${API_BASE.replace(/\/api$/, '')}/${img}`;
+    return getProductImageUrl(img) || 'https://placehold.co/48x48/1e293b/94a3b8?text=IMG';
   };
 
   const getPkgImgSrc = (img?: string | null) => {
     if (!img) return '/images/diamond-art.png';
-    if (img.startsWith('http') || img.startsWith('blob')) return img;
-    if (img.startsWith('/uploads')) return `${API_BASE.replace(/\/api$/, '')}${img}`;
-    if (img.startsWith('/')) return img;
-    return `${API_BASE.replace(/\/api$/, '')}/${img}`;
+    return getProductImageUrl(img) || '/images/diamond-art.png';
   };
 
   const totalPackagesCount = allProducts.reduce((sum, p) => sum + (p.packages?.length || 0), 0);
 
   const navItems = [
     { id: 'metrics', icon: BarChart3, label: 'Overview', count: null },
+    { id: 'gateway', icon: Zap, label: 'VNGZZ Top-Up Gateway', count: null },
+    { id: 'apisettings', icon: Key, label: 'Change API & URLs', count: null },
     { id: 'orders', icon: ShoppingBag, label: 'Orders', count: orders.length },
     { id: 'products', icon: Package, label: 'Game Products', count: allProducts.length },
     { id: 'diamonds', icon: Gem, label: 'Diamonds / Packages', count: totalPackagesCount },
@@ -893,18 +927,25 @@ export default function AdminDashboard() {
 
   if (!isAdmin) return null;
 
-  const panelCls = 'border border-slate-800 rounded-2xl';
-  const panelBg = { background: 'rgba(15,23,42,0.65)' };
-  const inputCls = 'w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 text-xs';
-  const btnGrad = { background: 'linear-gradient(to right,#06b6d4,#8b5cf6)' };
+  const panelCls = 'admin-glass-card rounded-2xl sm:rounded-3xl shadow-xl shadow-black/20 transition-all duration-300';
+  const panelBg = {};
+  const inputCls = 'w-full px-3.5 py-2.5 bg-[#140516]/90 border border-pink-900/40 hover:border-pink-500/40 rounded-xl text-pink-100 placeholder-pink-400/30 focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/25 text-xs sm:text-sm transition-all';
+  const btnGrad = { background: 'linear-gradient(135deg, #ec4899, #f43f5e, #db2777)' };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-200" style={{ fontFamily: "'Inter',sans-serif" }}>
+    <div className="min-h-screen bg-[#FF8DA1] flex text-pink-50 relative selection:bg-pink-500 selection:text-white" style={{ fontFamily: "'Inter',sans-serif" }}>
+
+      {/* ── Ambient Pink Glowing Background Lights ── */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute -top-40 left-1/4 w-[500px] h-[500px] bg-pink-600/12 rounded-full blur-[140px] animate-pulse" />
+        <div className="absolute top-1/3 -right-20 w-[450px] h-[450px] bg-rose-500/10 rounded-full blur-[130px]" />
+        <div className="absolute bottom-10 left-10 w-[550px] h-[550px] bg-fuchsia-600/10 rounded-full blur-[150px]" />
+      </div>
 
       {/* Mobile Drawer Backdrop */}
       {mobileSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/75 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-200"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -916,29 +957,29 @@ export default function AdminDashboard() {
           transition: 'width .3s, transform .3s', 
           flexShrink: 0 
         }}
-        className={`fixed top-0 left-0 h-full z-50 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden ${
+        className={`fixed top-0 left-0 h-full z-50 bg-[#18071c]/95 border-r border-pink-900/30 backdrop-blur-xl flex flex-col overflow-hidden ${
           isMobile 
             ? (mobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full')
             : 'translate-x-0'
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-slate-800 min-w-0">
+        <div className="flex items-center justify-between px-4 py-5 border-b border-pink-900/30 min-w-0">
           <div className="flex items-center min-w-0">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg" style={{ background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-pink-500/25" style={{ background: 'linear-gradient(135deg,#ec4899,#f43f5e)' }}>
               <Zap className="h-5 w-5 text-white" />
             </div>
             {(sidebarOpen || isMobile) && (
               <div className="ml-3 overflow-hidden">
-                <div className="text-white font-black text-sm">𝘿𝘼𝙍𝘼-𝙎𝙏𝙊𝙍𝙀</div>
-                <div className="text-[10px] text-cyan-400 font-semibold">Admin Panel</div>
+                <div className="text-white font-black text-sm tracking-tight">𝙉𝘼-𝘿𝙔 𝙏𝙊𝙋𝙐𝙋</div>
+                <div className="text-[10px] text-pink-400 font-semibold">Admin Panel</div>
               </div>
             )}
           </div>
           {isMobile && (
             <button
               onClick={() => setMobileSidebarOpen(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white"
+              className="p-1 rounded-lg text-pink-300 hover:text-white"
               aria-label="Close menu"
             >
               <X className="h-5 w-5" />
@@ -954,27 +995,31 @@ export default function AdminDashboard() {
                 setActiveTab(item.id);
                 if (isMobile) setMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-semibold transition-all relative min-h-[44px] ${activeTab === item.id ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+              className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-semibold transition-all relative min-h-[44px] ${
+                activeTab === item.id 
+                  ? 'bg-gradient-to-r from-pink-500/20 to-rose-500/10 text-pink-200 border border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]' 
+                  : 'text-pink-300/60 hover:text-pink-100 hover:bg-pink-950/40'
+              }`}
               style={{ gap: 12 }}
             >
-              {activeTab === item.id && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-cyan-500 rounded-r-full" />}
-              <item.icon className={`h-4 w-4 shrink-0 ${activeTab === item.id ? 'text-cyan-400' : 'text-slate-500'}`} />
+              {activeTab === item.id && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-pink-400 to-rose-500 rounded-r-full" />}
+              <item.icon className={`h-4 w-4 shrink-0 ${activeTab === item.id ? 'text-pink-400' : 'text-pink-400/50'}`} />
               {(sidebarOpen || isMobile) && <>
                 <span className="flex-1 text-left whitespace-nowrap">{item.label}</span>
-                {item.count !== null && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === item.id ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800 text-slate-500'}`}>{item.count}</span>}
+                {item.count !== null && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${activeTab === item.id ? 'bg-pink-500/30 text-pink-200' : 'bg-pink-950/60 text-pink-400/70 border border-pink-900/40'}`}>{item.count}</span>}
               </>}
             </button>
           ))}
         </nav>
         {/* Bottom */}
-        <div className="px-2 py-4 border-t border-slate-800 space-y-1">
+        <div className="px-2 py-4 border-t border-pink-900/30 space-y-1">
           {!isMobile && (
-            <button onClick={() => setSidebarOpen(v => !v)} className="w-full flex items-center px-3 py-2.5 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-slate-800 text-sm font-semibold transition-all min-h-[44px]" style={{ gap: 12 }}>
+            <button onClick={() => setSidebarOpen(v => !v)} className="w-full flex items-center px-3 py-2.5 rounded-xl text-pink-400/60 hover:text-pink-200 hover:bg-pink-950/40 text-sm font-semibold transition-all min-h-[44px]" style={{ gap: 12 }}>
               <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${sidebarOpen ? 'rotate-180' : ''}`} />
               {sidebarOpen && <span className="whitespace-nowrap">Collapse</span>}
             </button>
           )}
-          <button onClick={handleLogout} className="w-full flex items-center px-3 py-2.5 rounded-xl text-red-400/70 hover:text-red-400 hover:bg-red-500/10 text-sm font-semibold transition-all min-h-[44px]" style={{ gap: 12 }}>
+          <button onClick={handleLogout} className="w-full flex items-center px-3 py-2.5 rounded-xl text-rose-400/80 hover:text-rose-300 hover:bg-rose-500/10 text-sm font-semibold transition-all min-h-[44px]" style={{ gap: 12 }}>
             <LogOut className="h-4 w-4 shrink-0" />
             {(sidebarOpen || isMobile) && <span className="whitespace-nowrap">Logout</span>}
           </button>
@@ -983,58 +1028,83 @@ export default function AdminDashboard() {
 
       {/* ══ MAIN ══════════════════════════════════════════════════════════ */}
       <div 
-        className="flex-1 flex flex-col min-h-screen overflow-x-hidden w-full transition-all" 
+        className="flex-1 flex flex-col min-h-screen overflow-x-hidden w-full transition-all relative z-10" 
         style={{ marginLeft: isMobile ? 0 : (sidebarOpen ? 240 : 64), transition: 'margin-left .3s' }}
       >
         {/* Header */}
-        <header className="sticky top-0 z-20 flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-800" style={{ background: 'rgba(2,6,23,.95)', backdropFilter: 'blur(12px)' }}>
+        <header className="sticky top-0 z-20 flex items-center justify-between px-3.5 sm:px-6 py-2.5 sm:py-3.5 border-b border-pink-900/30" style={{ background: 'rgba(20, 5, 22, 0.94)', backdropFilter: 'blur(20px)' }}>
           <div className="flex items-center space-x-2.5 min-w-0">
             <button
               type="button"
               onClick={() => setMobileSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white min-h-[40px] min-w-[40px] flex items-center justify-center active:scale-95"
+              className="md:hidden p-2 rounded-xl bg-[#1d0a21] border border-pink-900/40 text-pink-300 hover:text-white min-h-[40px] min-w-[40px] flex items-center justify-center active:scale-90 transition-transform shadow-xs cursor-pointer"
               aria-label="Open sidebar"
             >
               <Menu className="h-5 w-5" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-black text-white truncate">{navItems.find(n => n.id === activeTab)?.label}</h1>
-              <p className="text-[9px] sm:text-[10px] text-slate-500 truncate">Admin Dashboard</p>
+              <h1 className="text-sm sm:text-base font-black text-white truncate flex items-center gap-2">
+                <span>{navItems.find(n => n.id === activeTab)?.label}</span>
+              </h1>
+              <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-pink-400/70 truncate">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-emerald-400 font-semibold">Live System Online</span>
+                <span className="text-pink-600">•</span>
+                <span>Admin Dashboard</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            <button onClick={loadAllData} disabled={loading} className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition-all disabled:opacity-50 min-h-[36px]">
+            {providerProfile?.user && (
+              <button
+                onClick={() => setActiveTab('gateway')}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-950/70 to-pink-950/70 border border-pink-500/40 text-xs font-bold text-white hover:border-pink-400 hover:shadow-[0_0_12px_rgba(236,72,153,0.3)] transition-all min-h-[36px] active:scale-95 cursor-pointer"
+                title="VNGZZ2GAME Reseller Balance (/api/v1/game2/profile)"
+              >
+                <Zap className="h-3.5 w-3.5 text-pink-400 animate-pulse" />
+                <span className="hidden sm:inline text-slate-300 font-semibold">Reseller:</span>
+                <span className="font-mono text-emerald-400 font-black">${Number(providerProfile.user.balance || 0).toFixed(2)}</span>
+              </button>
+            )}
+            <button onClick={loadAllData} disabled={loading} className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#1d0a21] border border-pink-900/40 text-pink-200 hover:text-white hover:border-pink-500/50 hover:shadow-[0_0_12px_rgba(236,72,153,0.2)] text-xs font-bold transition-all disabled:opacity-50 min-h-[36px] active:scale-95 cursor-pointer">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">Sync</span>
             </button>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-xs" style={{ background: 'linear-gradient(135deg,#06b6d4,#8b5cf6)' }}>A</div>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shadow-md shadow-pink-500/30 ring-2 ring-pink-500/40 animate-badge-float cursor-default" style={{ background: 'linear-gradient(135deg,#ec4899,#f43f5e)' }}>A</div>
           </div>
         </header>
 
         {/* Mobile Horizontal Quick Tabs */}
-        <div className="md:hidden flex items-center space-x-1.5 overflow-x-auto no-scrollbar px-3 py-2 border-b border-slate-800/80 bg-slate-950/80">
+        <div className="md:hidden flex items-center space-x-1.5 overflow-x-auto mobile-touch-scroll px-3 py-2 border-b border-pink-900/30 bg-[#160619]/95 backdrop-blur-xl select-none">
           {navItems.map(item => (
             <button
               key={`quick-${item.id}`}
               onClick={() => setActiveTab(item.id)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all min-h-[36px] ${
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all active:scale-90 min-h-[38px] cursor-pointer ${
                 activeTab === item.id 
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs' 
-                  : 'text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800'
+                  ? 'bg-gradient-to-r from-pink-500/30 to-rose-500/20 text-white border border-pink-500/50 shadow-md shadow-pink-500/20' 
+                  : 'text-pink-300/70 hover:text-pink-100 bg-[#1d0a21] border border-pink-900/40'
               }`}
             >
-              <item.icon className="h-3.5 w-3.5" />
+              <item.icon className={`h-3.5 w-3.5 ${activeTab === item.id ? 'text-pink-400' : 'text-pink-400/60'}`} />
               <span>{item.label}</span>
+              {item.count !== null && (
+                <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${
+                  activeTab === item.id ? 'bg-pink-500 text-white' : 'bg-pink-950 text-pink-400 border border-pink-900/50'
+                }`}>
+                  {item.count}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         {/* Toast notifications */}
         <div className="fixed top-4 right-4 z-50 space-y-2 max-w-[90vw]" style={{ width: 320 }}>
-          {error && <div className="flex items-start bg-red-950 border border-red-800/70 rounded-xl p-3.5 text-red-300 text-xs shadow-2xl" style={{ gap: 10 }}>
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" /><span className="flex-1">{error}</span><button onClick={() => setError('')}><X className="h-3.5 w-3.5 opacity-60 hover:opacity-100" /></button>
+          {error && <div className="flex items-start bg-rose-950/90 border border-rose-800/70 rounded-xl p-3.5 text-rose-200 text-xs shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2" style={{ gap: 10 }}>
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" /><span className="flex-1">{error}</span><button onClick={() => setError('')}><X className="h-3.5 w-3.5 opacity-60 hover:opacity-100" /></button>
           </div>}
-          {success && <div className="flex items-start bg-emerald-950 border border-emerald-800/70 rounded-xl p-3.5 text-emerald-300 text-xs shadow-2xl" style={{ gap: 10 }}>
-            <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" /><span className="flex-1">{success}</span><button onClick={() => setSuccess('')}><X className="h-3.5 w-3.5 opacity-60 hover:opacity-100" /></button>
+          {success && <div className="flex items-start bg-emerald-950/90 border border-emerald-800/70 rounded-xl p-3.5 text-emerald-200 text-xs shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2" style={{ gap: 10 }}>
+            <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" /><span className="flex-1">{success}</span><button onClick={() => setSuccess('')}><X className="h-3.5 w-3.5 opacity-60 hover:opacity-100" /></button>
           </div>}
         </div>
 
@@ -1042,48 +1112,95 @@ export default function AdminDashboard() {
         <main className="flex-1 p-3 sm:p-6 overflow-x-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32">
-              <div className="h-10 w-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-slate-400 text-xs">Loading dashboard...</p>
+              <div className="h-10 w-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-pink-300/70 text-xs">Loading dashboard...</p>
             </div>
           ) : (<>
 
             {/* ── TAB 1: OVERVIEW ─────────────────────────────────── */}
             {activeTab === 'metrics' && metrics && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                  {[
-                    { label: 'Total Revenue', value: `$${metrics.totalRevenue.toFixed(2)}`, Icon: DollarSign, clr: '#10b981', bg: 'rgba(16,185,129,.08)', sub: 'Completed orders' },
-                    { label: 'Completed', value: metrics.completedOrders, Icon: CheckCircle, clr: '#06b6d4', bg: 'rgba(6,182,212,.08)', sub: 'Delivered' },
-                    { label: 'Pending', value: metrics.pendingOrders, Icon: Clock, clr: '#f59e0b', bg: 'rgba(245,158,11,.08)', sub: 'Awaiting payment' },
-                    { label: 'Total Orders', value: metrics.totalOrders, Icon: ShoppingBag, clr: '#8b5cf6', bg: 'rgba(139,92,246,.08)', sub: 'All time' },
-                  ].map(card => (
-                    <div key={card.label} className={`${panelCls} p-5 hover:border-slate-700 transition-all`} style={panelBg}>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-slate-400 text-xs font-semibold">{card.label}</span>
-                        <div className="p-2 rounded-xl" style={{ background: card.bg }}><card.Icon className="h-4 w-4" style={{ color: card.clr }} /></div>
+              <div className="space-y-5 sm:space-y-6 animate-admin-tab">
+                {/* Provider Gateway Quick Bar */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/80 via-slate-900/90 to-pink-950/80 border border-pink-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg backdrop-blur-md">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-xl bg-pink-500/20 text-pink-400 border border-pink-500/30">
+                      <Zap className="h-5 w-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-white font-bold text-sm">VNGZZ2GAME Provider Gateway</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          LIVE ACTIVE
+                        </span>
                       </div>
-                      <div className="text-3xl font-black text-white mb-1">{card.value}</div>
-                      <div className="text-[10px] text-slate-500">{card.sub}</div>
+                      <p className="text-[11px] text-slate-300">
+                        Reseller: <strong className="text-white font-mono">{providerProfile?.user?.username || 'darazzdev'}</strong> • Live Balance: <strong className="text-emerald-400 font-mono">${Number(providerProfile?.user?.balance ?? 0.10).toFixed(2)} USD</strong> • Stock 2 (/api/v1/game2/profile)
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3 self-end sm:self-auto">
+                    <button
+                      onClick={() => setActiveTab('gateway')}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black text-xs hover:brightness-110 shadow-md flex items-center space-x-1.5 transition-all cursor-pointer active:scale-95"
+                    >
+                      <Wallet className="h-3.5 w-3.5" />
+                      <span>Manage Gateway & Deposit</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
+                  {[
+                    { label: 'Total Revenue', value: `$${metrics.totalRevenue.toFixed(2)}`, Icon: DollarSign, clr: '#10b981', bg: 'rgba(16,185,129,.15)', glow: 'hover:shadow-[0_8px_30px_rgba(16,185,129,0.3)]', sub: 'Completed orders', borderGlow: 'hover:border-emerald-500/50' },
+                    { label: 'Completed', value: metrics.completedOrders, Icon: CheckCircle, clr: '#ec4899', bg: 'rgba(236,72,153,.18)', glow: 'hover:shadow-[0_8px_30px_rgba(236,72,153,0.35)]', sub: 'Delivered', borderGlow: 'hover:border-pink-500/60' },
+                    { label: 'Pending', value: metrics.pendingOrders, Icon: Clock, clr: '#f59e0b', bg: 'rgba(245,158,11,.15)', glow: 'hover:shadow-[0_8px_30px_rgba(245,158,11,0.3)]', sub: 'Awaiting payment', borderGlow: 'hover:border-amber-500/50' },
+                    { label: 'Total Orders', value: metrics.totalOrders, Icon: ShoppingBag, clr: '#d946ef', bg: 'rgba(217,70,239,.15)', glow: 'hover:shadow-[0_8px_30px_rgba(217,70,239,0.3)]', sub: 'All time', borderGlow: 'hover:border-fuchsia-500/50' },
+                  ].map((card, cIdx) => (
+                    <div 
+                      key={card.label} 
+                      className={`${panelCls} p-3.5 sm:p-5 ${card.borderGlow} ${card.glow} hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 group cursor-default relative overflow-hidden`}
+                      style={{ 
+                        ...panelBg,
+                        animationDelay: `${cIdx * 75}ms` 
+                      }}
+                    >
+                      {/* Ambient corner light */}
+                      <div className="absolute -top-12 -right-12 w-24 h-24 rounded-full opacity-30 group-hover:opacity-60 transition-opacity duration-300 blur-xl" style={{ background: card.clr }} />
+
+                      <div className="flex items-center justify-between mb-2 sm:mb-3 relative z-10">
+                        <span className="text-pink-200/70 text-[11px] sm:text-xs font-semibold">{card.label}</span>
+                        <div className="p-2 sm:p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 shadow-xs" style={{ background: card.bg }}>
+                          <card.Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: card.clr }} />
+                        </div>
+                      </div>
+                      <div className="text-xl sm:text-3xl font-black text-white mb-0.5 sm:mb-1 tracking-tight group-hover:text-pink-100 transition-colors relative z-10">{card.value}</div>
+                      <div className="text-[9px] sm:text-[10px] text-pink-300/50 font-medium relative z-10">{card.sub}</div>
                     </div>
                   ))}
                 </div>
+
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                   <div className={`xl:col-span-2 ${panelCls} p-5`} style={panelBg}>
-                    <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><TrendingUp className="h-4 w-4 text-cyan-400" /><span>Recent Transactions</span></h3>
+                    <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><TrendingUp className="h-4 w-4 text-pink-400" /><span>Recent Transactions</span></h3>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
-                        <thead><tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider">
-                          {['Game','Player','Amount','Status'].map(h=><th key={h} className="py-2 pr-4 font-semibold">{h}</th>)}
+                        <thead><tr className="border-b border-pink-900/40 text-pink-300/60 uppercase tracking-wider text-[10px]">
+                          {['Game','Player','Amount','Status'].map(h=><th key={h} className="py-2.5 pr-4 font-semibold">{h}</th>)}
                         </tr></thead>
-                        <tbody className="divide-y divide-slate-800">
+                        <tbody className="divide-y divide-pink-950/50">
                           {recentOrders.map((o: any, idx: number) => (
-                            <tr key={`ro-${o.id || idx}-${idx}`} className="hover:bg-slate-800/20">
+                            <tr key={`ro-${o.id || idx}-${idx}`} className="hover:bg-pink-500/8 transition-colors duration-150">
                               <td className="py-2.5 pr-4 text-white font-semibold">{o.package?.product?.name||'—'}</td>
-                              <td className="py-2.5 pr-4 text-slate-300">
-                                <div>{o.playerNickname||o.playerId}</div>
-                                {o.playerZoneId && <span className="text-cyan-400 font-mono text-[10px]">({o.playerZoneId})</span>}
+                              <td className="py-2.5 pr-4 text-pink-100/90">
+                                <div className="font-semibold text-white">{o.playerNickname||o.playerId}</div>
+                                {o.user?.email && (
+                                  <div className="text-[10px] text-pink-400 font-mono truncate max-w-[140px]" title={o.user.email}>
+                                    👤 {o.user.email}
+                                  </div>
+                                )}
+                                {o.playerZoneId && <span className="text-pink-400 font-mono text-[10px]">({o.playerZoneId})</span>}
                               </td>
-                              <td className="py-2.5 pr-4 text-cyan-400 font-bold">${o.price.toFixed(2)}</td>
+                              <td className="py-2.5 pr-4 text-pink-400 font-black">${o.price.toFixed(2)}</td>
                               <td className="py-2.5">{getStatusBadge(o.status)}</td>
                             </tr>
                           ))}
@@ -1092,22 +1209,22 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className={`${panelCls} p-5`} style={panelBg}>
-                    <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><Star className="h-4 w-4 text-amber-400" /><span>Popularity</span></h3>
+                    <h3 className="text-white font-extrabold text-sm mb-4 flex items-center space-x-2"><Star className="h-4 w-4 text-pink-400" /><span>Popularity</span></h3>
                     <div className="space-y-3">
                       {popularity.map((g: any, i: number) => (
                         <div key={`pop-${g.id || g.name || 'game'}-${i}`} className="flex items-center" style={{ gap: 10 }}>
-                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
-                            style={{ background: i===0?'rgba(245,158,11,.2)':'rgba(51,65,85,.5)', color: i===0?'#f59e0b':'#64748b' }}>{i+1}</span>
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs"
+                            style={{ background: i===0?'rgba(236,72,153,.25)':'rgba(244,63,94,.15)', color: i===0?'#f472b6':'#fda4af' }}>{i+1}</span>
                           <div className="flex-1 min-w-0">
                             <div className="text-white text-xs font-bold truncate">{g.name}</div>
-                            <div className="mt-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width:`${Math.max(5,(g.salesCount/(popularity[0]?.salesCount||1))*100)}%`, background:'linear-gradient(to right,#06b6d4,#8b5cf6)' }} />
+                            <div className="mt-1 h-1.5 bg-[#170519] rounded-full overflow-hidden border border-pink-900/30">
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width:`${Math.max(5,(g.salesCount/(popularity[0]?.salesCount||1))*100)}%`, background:'linear-gradient(to right,#ec4899,#f43f5e,#fb7185)' }} />
                             </div>
                           </div>
-                          <span className="text-[10px] text-slate-400 font-bold shrink-0">{g.salesCount}</span>
+                          <span className="text-[10px] text-pink-300 font-bold shrink-0">{g.salesCount}</span>
                         </div>
                       ))}
-                      {!popularity.length && <p className="text-slate-600 text-xs text-center py-6">No data yet</p>}
+                      {!popularity.length && <p className="text-pink-400/50 text-xs text-center py-6">No data yet</p>}
                     </div>
                   </div>
                 </div>
@@ -1116,33 +1233,33 @@ export default function AdminDashboard() {
 
             {/* ── TAB 2: ORDERS ──────────────────────────────────── */}
             {activeTab === 'orders' && (
-              <div className="space-y-5">
-                <div className={`flex flex-wrap gap-3 items-center ${panelCls} p-4`} style={panelBg}>
-                  <select value={orderFilter} onChange={e=>setOrderFilter(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg text-slate-300 text-xs px-3 py-2 focus:outline-none focus:border-cyan-500">
+              <div className="space-y-5 animate-admin-tab">
+                <div className={`flex flex-wrap gap-2.5 sm:gap-3 items-center ${panelCls} p-3.5 sm:p-4`} style={panelBg}>
+                  <select value={orderFilter} onChange={e=>setOrderFilter(e.target.value)} className="bg-[#170519] border border-pink-900/40 rounded-xl text-pink-200 text-xs px-3 py-2 focus:outline-none focus:border-pink-500 transition-all cursor-pointer min-h-[38px]">
                     <option value="">All Statuses</option>
-                    {['PENDING','COMPLETED','SUCCESS','FAILED'].map(s=><option key={s} value={s}>{s}</option>)}
+                    {['PENDING','COMPLETED','SUCCESS','CANCELLED','FAILED'].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
-                  <div className="flex-1 relative" style={{ minWidth: 200 }}>
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <div className="flex-1 relative min-w-[160px] sm:min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-pink-400/50" />
                     <input type="text" placeholder="Search player, txn ID..." value={orderSearch}
                       onChange={e=>setOrderSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSearchOrders()}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500" />
+                      className="w-full pl-9 pr-3 py-2 bg-[#170519] border border-pink-900/40 rounded-xl text-xs text-pink-100 placeholder-pink-400/30 focus:outline-none focus:border-pink-500 transition-all min-h-[38px]" />
                   </div>
-                  <button onClick={handleSearchOrders} className="px-4 py-2 rounded-lg text-xs font-bold" style={{ background:'rgba(6,182,212,.1)', border:'1px solid rgba(6,182,212,.2)', color:'#06b6d4' }}>Search</button>
-                  <button onClick={()=>{setOrderFilter('');setOrderSearch('');loadAllData();}} className="px-4 py-2 rounded-lg bg-slate-800 text-slate-400 text-xs font-bold hover:text-white">Reset</button>
+                  <button onClick={handleSearchOrders} className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer min-h-[38px]" style={{ background:'rgba(236,72,153,.18)', border:'1px solid rgba(236,72,153,.35)', color:'#f472b6' }}>Search</button>
+                  <button onClick={()=>{setOrderFilter('');setOrderSearch('');loadAllData();}} className="px-3.5 py-2 rounded-xl bg-[#240828] text-pink-300/80 hover:text-white border border-pink-900/40 text-xs font-bold transition-all active:scale-95 cursor-pointer min-h-[38px]">Reset</button>
 
                   {/* Auto-Sync Live Orders Toggle */}
                   <button
                     type="button"
                     onClick={() => setAutoSyncOrders(!autoSyncOrders)}
-                    className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all ${
+                    className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all active:scale-95 cursor-pointer min-h-[38px] ${
                       autoSyncOrders
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10 shadow-sm'
-                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        ? 'bg-pink-500/20 text-pink-200 border border-pink-500/40 shadow-pink-500/10 shadow-sm'
+                        : 'bg-[#1a071d] text-pink-400/60 border border-pink-900/40'
                     }`}
                     title="Real-time live sync every 4s"
                   >
-                    <span className={`h-2 w-2 rounded-full ${autoSyncOrders ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span className={`h-2 w-2 rounded-full ${autoSyncOrders ? 'bg-pink-400 animate-pulse' : 'bg-pink-900'}`} />
                     <span>Auto-Sync: {autoSyncOrders ? 'ON' : 'OFF'}</span>
                   </button>
 
@@ -1151,44 +1268,49 @@ export default function AdminDashboard() {
                     type="button"
                     onClick={handleAutoVerifyAll}
                     disabled={autoVerifyingAll || actionLoading}
-                    className="px-3.5 py-2 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all bg-gradient-to-r from-cyan-500/20 via-sky-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-300 hover:from-cyan-500/30 hover:to-blue-500/30 active:scale-95 disabled:opacity-50 shadow-cyan-500/10 shadow-sm"
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all bg-gradient-to-r from-pink-500/20 via-rose-500/20 to-fuchsia-500/20 border border-pink-500/40 text-pink-200 hover:from-pink-500/30 hover:to-fuchsia-500/30 active:scale-95 disabled:opacity-50 shadow-pink-500/10 shadow-sm cursor-pointer min-h-[38px]"
                     title="Automatically verify all pending orders with payment gateways and fulfill paid ones"
                   >
-                    <Zap className={`h-3.5 w-3.5 text-cyan-400 ${autoVerifyingAll ? 'animate-spin' : ''}`} />
+                    <Zap className={`h-3.5 w-3.5 text-pink-400 ${autoVerifyingAll ? 'animate-spin' : ''}`} />
                     <span>{autoVerifyingAll ? 'Auto-Checking...' : '⚡ Auto-Check All Pending'}</span>
                   </button>
 
-                  <span className="text-xs text-slate-500 ml-auto">{orders.length} records</span>
+                  <span className="text-xs text-pink-400/60 ml-auto font-medium">{orders.length} records</span>
                 </div>
                 <div className={`${panelCls} overflow-hidden`} style={panelBg}>
-                  <div className="overflow-x-auto" style={{ maxHeight: 580, overflowY:'auto' }}>
-                    <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 border-b border-slate-800" style={{ background:'#0f172a' }}>
-                        <tr className="text-slate-500 uppercase tracking-wider">
+                  <div className="overflow-x-auto mobile-touch-scroll" style={{ maxHeight: 580, overflowY:'auto' }}>
+                    <table className="w-full text-left text-xs min-w-[760px]">
+                      <thead className="sticky top-0 border-b border-pink-900/40" style={{ background:'#19061c' }}>
+                        <tr className="text-pink-300/60 uppercase tracking-wider text-[10px]">
                           {['Txn ID','Game / Package','Player','Amount','Method','Status','Date','Actions'].map(h=><th key={h} className="px-4 py-3 font-semibold whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-800">
+                      <tbody className="divide-y divide-pink-950/60">
                         {orders.map((o: any, oIdx: number) => (
                           <React.Fragment key={`order-${o.id || oIdx}-${oIdx}`}>
-                            <tr className="hover:bg-slate-800/20">
-                              <td className="px-4 py-3 font-mono text-slate-400 text-[10px] whitespace-nowrap">{o.paymentTxnId?.slice(0,18)}…</td>
-                              <td className="px-4 py-3"><div className="text-white font-semibold whitespace-nowrap">{o.package?.product?.name}</div><div className="text-slate-500 text-[10px]">{o.package?.name}</div></td>
+                            <tr className="hover:bg-pink-500/8 transition-colors duration-150">
+                              <td className="px-4 py-3 font-mono text-pink-300/60 text-[10px] whitespace-nowrap">{o.paymentTxnId?.slice(0,18)}…</td>
+                              <td className="px-4 py-3"><div className="text-white font-semibold whitespace-nowrap">{o.package?.product?.name}</div><div className="text-pink-400/50 text-[10px]">{o.package?.name}</div></td>
                               <td className="px-4 py-3">
-                                <div className="text-slate-200 whitespace-nowrap">{o.playerNickname||'—'}</div>
-                                <div className="text-slate-400 font-mono text-[10px] flex items-center gap-1 flex-wrap">
+                                <div className="text-white font-semibold whitespace-nowrap">{o.playerNickname||'—'}</div>
+                                {o.user?.email && (
+                                  <div className="text-[10px] text-pink-400 font-mono truncate max-w-[130px]" title={o.user.email}>
+                                    👤 {o.user.email}
+                                  </div>
+                                )}
+                                <div className="text-pink-300/60 font-mono text-[10px] flex items-center gap-1 flex-wrap mt-0.5">
                                   <span>{o.playerId}</span>
                                   {o.playerZoneId && (
-                                    <span className="text-cyan-400 font-sans font-bold text-[9px] px-1 py-0.2 rounded bg-cyan-950/60 border border-cyan-500/20">
+                                    <span className="text-pink-300 font-sans font-bold text-[9px] px-1 py-0.2 rounded bg-pink-950/60 border border-pink-500/30">
                                       Zone: {o.playerZoneId}
                                     </span>
                                   )}
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-cyan-400 font-bold whitespace-nowrap">${o.price.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-slate-400 whitespace-nowrap">{o.paymentMethod}</td>
+                              <td className="px-4 py-3 text-pink-400 font-black whitespace-nowrap">${o.price.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-pink-200/80 whitespace-nowrap">{o.paymentMethod}</td>
                               <td className="px-4 py-3">{getStatusBadge(o.status)}</td>
-                              <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{new Date(o.createdAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-pink-400/60 whitespace-nowrap">{new Date(o.createdAt).toLocaleDateString()}</td>
                               <td className="px-4 py-3">
                                 {o.status==='PENDING'&&(
                                   <div className="flex items-center space-x-1">
@@ -1241,7 +1363,7 @@ export default function AdminDashboard() {
 
             {/* ── TAB 4: PRODUCTS ──────────────────────────────── */}
             {activeTab==='products'&&(
-              <div className="space-y-6">
+              <div className="space-y-6 animate-admin-tab">
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {/* Add Product */}
                   <div className={`${panelCls} p-5`} style={panelBg}>
@@ -1315,20 +1437,102 @@ export default function AdminDashboard() {
                         </label>
                       </div>
 
+                      {/* Check ID / Account Verification Engine Toggle */}
+                      <div className="rounded-xl p-3.5 bg-slate-950/70 border border-slate-800 space-y-2.5">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-2.5">
+                            <input
+                              id="newProductHasCheckIdCheck"
+                              type="checkbox"
+                              checked={newProductHasCheckId}
+                              onChange={e => setNewProductHasCheckId(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                            />
+                            <label htmlFor="newProductHasCheckIdCheck" className="text-xs text-slate-300 cursor-pointer">
+                              <span className="font-bold text-white flex items-center gap-1.5">
+                                🔍 Enable Auto Check ID (ផ្ទៀងផ្ទាត់ Player ID & Nickname ស្វ័យប្រវត្តិ)
+                              </span>
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                {newProductHasCheckId 
+                                  ? 'ប្រព័ន្ធនឹងពិនិត្យ និងបង្ហាញឈ្មោះក្នុងហ្គេម (Nickname) របស់អតិថិជនមុនពេលទិញ'
+                                  : 'Direct Recharge (បញ្ចូលផ្ទាល់) — មិនពិនិត្យឈ្មោះទេ អតិថិជនបញ្ចូល ID ហើយបន្តទិញបានភ្លាម'}
+                              </span>
+                            </label>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            newProductHasCheckId ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {newProductHasCheckId ? 'Check ID: Active' : 'Direct Top-Up'}
+                          </span>
+                        </div>
+
+                        {newProductHasCheckId && (
+                          <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+                            <label className="block text-[11px] font-semibold text-slate-400">
+                              Check ID Engine / Game Code (ម៉ាស៊ីនផ្ទៀងផ្ទាត់ហ្គេម)
+                            </label>
+                            <select
+                              value={newProductCheckCode}
+                              onChange={e => setNewProductCheckCode(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg text-slate-200 p-2.5 text-xs focus:outline-none focus:border-cyan-500"
+                            >
+                              <option value="">⚡ Auto Detect (ស្វ័យប្រវត្តិតាមឈ្មោះហ្គេម)</option>
+                              <option value="mlbb">🎮 Mobile Legends: Bang Bang (mlbb)</option>
+                              <option value="freefire">🔥 Free Fire / Free Fire MAX (freefire)</option>
+                              <option value="pubgm">🔫 PUBG Mobile (pubgm)</option>
+                              <option value="genshin">✨ Genshin Impact (genshin)</option>
+                              <option value="hok">👑 Honor of Kings (hok)</option>
+                              <option value="blood_strike">🎯 Blood Strike (blood_strike)</option>
+                              <option value="farlight84">🚀 Farlight 84 (farlight84)</option>
+                              <option value="roblox">🧱 Roblox (roblox)</option>
+                              <option value="valorant">🎯 Valorant (valorant)</option>
+                              <option value="telegram">✈️ Telegram (@username verification)</option>
+                              <option value="custom">⚙️ Custom Game Code (បញ្ចូលកូដផ្ទាល់)...</option>
+                            </select>
+
+                            {newProductCheckCode === 'custom' && (
+                              <div className="mt-2">
+                                <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                                  Custom Code (ឧទាហរណ៍: codm, efootball, league_of_legends)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. codm, apex_mobile, efootball"
+                                  value={newProductCustomCode}
+                                  onChange={e => setNewProductCustomCode(e.target.value)}
+                                  className={inputCls}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Zone ID / Server ID Requirement Toggle */}
-                      <div className="rounded-xl p-3 bg-slate-950/70 border border-slate-800 space-y-2">
-                        <div className="flex items-start space-x-2.5">
-                          <input
-                            id="newProductHasZoneCheck"
-                            type="checkbox"
-                            checked={newProductHasZone}
-                            onChange={e => setNewProductHasZone(e.target.checked)}
-                            className="mt-0.5 h-4 w-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
-                          />
-                          <label htmlFor="newProductHasZoneCheck" className="text-xs text-slate-300 cursor-pointer">
-                            <span className="font-bold text-white block">Requires Zone ID / Server ID (ទាមទារ Zone/Server ID)</span>
-                            <span className="text-[11px] text-slate-400">Enable this for games like Mobile Legends (Zone ID) or Genshin Impact (Server ID).</span>
-                          </label>
+                      <div className="rounded-xl p-3.5 bg-slate-950/70 border border-slate-800 space-y-2.5">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-2.5">
+                            <input
+                              id="newProductHasZoneCheck"
+                              type="checkbox"
+                              checked={newProductHasZone}
+                              onChange={e => setNewProductHasZone(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 rounded bg-slate-900 border-slate-700 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                            />
+                            <label htmlFor="newProductHasZoneCheck" className="text-xs text-slate-300 cursor-pointer">
+                              <span className="font-bold text-white flex items-center gap-1.5">
+                                🌐 Requires Zone ID / Server ID (ទាមទារ Zone ID ឬ Server ID)
+                              </span>
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                បើកមុខងារនេះសម្រាប់ហ្គេមដែលមាន Zone ID (ឧទាហរណ៍ Mobile Legends) ឬ Server ID (ឧទាហរណ៍ Genshin Impact)។
+                              </span>
+                            </label>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                            newProductHasZone ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-slate-800 text-slate-400'
+                          }`}>
+                            {newProductHasZone ? 'Zone ID: Required' : 'No Zone ID'}
+                          </span>
                         </div>
                         {newProductHasZone && (
                           <div className="pt-2 border-t border-slate-800">
@@ -1713,7 +1917,7 @@ export default function AdminDashboard() {
 
             {/* ══ TAB 4B: DIAMONDS & PACKAGES EDITOR ════════════════════════ */}
             {activeTab === 'diamonds' && (
-              <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="space-y-6 animate-admin-tab">
                 
                 {/* Header & Quick Summary */}
                 <div className={`${panelCls} p-5 sm:p-6`} style={panelBg}>
@@ -2208,8 +2412,72 @@ export default function AdminDashboard() {
                       </button>
                     </div>
 
+                    {/* Check ID / Account Verification Engine Toggle */}
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                            🔍 Auto Check ID (ផ្ទៀងផ្ទាត់ Player ID & Nickname)
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {editProdHasCheckId ? 'បង្ហាញឈ្មោះ Nickname របស់អតិថិជនស្វ័យប្រវត្តិ' : 'Direct Recharge (បញ្ចូលផ្ទាល់) — មិនផ្ទៀងផ្ទាត់ឈ្មោះទេ'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditProdHasCheckId(!editProdHasCheckId)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                            editProdHasCheckId ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {editProdHasCheckId ? 'Check ID: Active' : 'Direct Top-Up'}
+                        </button>
+                      </div>
+
+                      {editProdHasCheckId && (
+                        <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+                          <label className="block text-[11px] font-semibold text-slate-400">
+                            Check ID Engine / Game Code (ម៉ាស៊ីនផ្ទៀងផ្ទាត់ហ្គេម)
+                          </label>
+                          <select
+                            value={editProdCheckCode}
+                            onChange={e => setEditProdCheckCode(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg text-slate-200 p-2.5 text-xs focus:outline-none focus:border-cyan-500"
+                          >
+                            <option value="">⚡ Auto Detect (ស្វ័យប្រវត្តិតាមឈ្មោះហ្គេម)</option>
+                            <option value="mlbb">🎮 Mobile Legends: Bang Bang (mlbb)</option>
+                            <option value="freefire">🔥 Free Fire / Free Fire MAX (freefire)</option>
+                            <option value="pubgm">🔫 PUBG Mobile (pubgm)</option>
+                            <option value="genshin">✨ Genshin Impact (genshin)</option>
+                            <option value="hok">👑 Honor of Kings (hok)</option>
+                            <option value="blood_strike">🎯 Blood Strike (blood_strike)</option>
+                            <option value="farlight84">🚀 Farlight 84 (farlight84)</option>
+                            <option value="roblox">🧱 Roblox (roblox)</option>
+                            <option value="valorant">🎯 Valorant (valorant)</option>
+                            <option value="telegram">✈️ Telegram (@username verification)</option>
+                            <option value="custom">⚙️ Custom Game Code (បញ្ចូលកូដផ្ទាល់)...</option>
+                          </select>
+
+                          {editProdCheckCode === 'custom' && (
+                            <div className="mt-2">
+                              <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                                Custom Code (ឧទាហរណ៍: codm, efootball, league_of_legends)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. codm, apex_mobile, efootball"
+                                value={editProdCustomCode}
+                                onChange={e => setEditProdCustomCode(e.target.value)}
+                                className={inputCls}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Zone ID / Server ID Toggle */}
-                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-xs font-bold text-white">Requires Zone ID / Server ID</p>
@@ -2574,7 +2842,7 @@ export default function AdminDashboard() {
 
             {/* ══ TAB 5: BACKUP & RESTORE ════════════════════════════════ */}
             {activeTab === 'backup' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-admin-tab">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -2742,7 +3010,7 @@ export default function AdminDashboard() {
 
             {/* ── TAB: CUSTOMER CONTACT & SUPPORT INQUIRIES ────────── */}
             {activeTab === 'contact' && (
-              <div className="space-y-6">
+              <div className="space-y-6 animate-admin-tab">
                 {/* Header Stats */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className={`${panelCls} p-4`} style={panelBg}>
@@ -2825,7 +3093,7 @@ export default function AdminDashboard() {
                       <p>No contact messages found.</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-slate-800/60 overflow-x-auto">
+                    <div className="divide-y divide-slate-800/60 overflow-x-auto mobile-touch-scroll">
                       {contactMessages
                         .filter(msg => {
                           if (contactStatusFilter !== 'ALL' && msg.status !== contactStatusFilter) return false;
@@ -2999,9 +3267,25 @@ export default function AdminDashboard() {
               </div>
             )}
 
+            {/* ── TAB: VNGZZ TOP-UP GATEWAY & RESELLER DASHBOARD ── */}
+            {activeTab === 'gateway' && (
+              <div className="animate-admin-tab">
+                <ProviderGatewayDashboard />
+              </div>
+            )}
+
+            {/* ── TAB: DYNAMIC API & PROVIDER SETTINGS ── */}
+            {activeTab === 'apisettings' && (
+              <div className="animate-admin-tab">
+                <ApiSettingsDashboard />
+              </div>
+            )}
+
             {/* ── TAB 6: SECURITY & ANTI-DDOS PROTECTION ────────────── */}
             {activeTab === 'security' && (
-              <SecurityDashboard />
+              <div className="animate-admin-tab">
+                <SecurityDashboard />
+              </div>
             )}
           </>)}
         </main>

@@ -6,9 +6,10 @@ import { useRouter, usePathname } from 'next/navigation';
 import { 
   LogOut, LayoutDashboard, Menu, X, 
   Home, Gamepad2, Send, User, ChevronRight, Sparkles,
-  Sun, Search, Zap, HelpCircle, Users, Award, ShieldCheck, MessageSquare
+  Sun, Moon, Search, Zap, HelpCircle, Users, Award, ShieldCheck, MessageSquare
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
+import { useTheme } from '../lib/ThemeContext';
 import Image from 'next/image';
 import AnnouncementTicker from './AnnouncementTicker';
 import CheckIdModal from './CheckIdModal';
@@ -34,7 +35,7 @@ export default function Header() {
   const [faqModalOpen, setFaqModalOpen] = useState(false);
   const [updatesModalOpen, setUpdatesModalOpen] = useState(false);
   const [checkIdModalOpen, setCheckIdModalOpen] = useState(false);
-  const [highContrast, setHighContrast] = useState(false);
+  const { theme, toggleTheme, isNight } = useTheme();
 
   // Load games for smart search
   useEffect(() => {
@@ -64,9 +65,10 @@ export default function Header() {
     const email = localStorage.getItem('user_email');
 
     if (token) {
+      const cleanEmail = (email || '').toLowerCase().trim();
       setIsLoggedIn(true);
-      setUserEmail(email || '');
-      setIsAdmin(role === 'ADMIN');
+      setUserEmail(cleanEmail);
+      setIsAdmin(role === 'ADMIN' && cleanEmail === 'mdara9695@gmail.com');
     } else {
       setIsLoggedIn(false);
       setIsAdmin(false);
@@ -116,185 +118,68 @@ export default function Header() {
           <div className="flex items-center justify-between h-15 sm:h-16 gap-2">
             
             {/* Logo & Branding */}
-            <Link href="/" className="flex items-center space-x-2 shrink-0 group">
-              <div className="relative h-9 w-9 rounded-full overflow-hidden ring-2 ring-pink-500/60 group-hover:ring-pink-400 transition-all shadow-md shrink-0 bg-slate-950">
+            <Link href="/" className="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0 group min-w-0">
+              <div className="relative h-9 sm:h-12 w-auto shrink-0 transition-transform group-hover:scale-105">
                 <Image
                   src="/images/nady-logo.png"
-                  alt="NA-DY TOPUP"
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-cover"
+                  alt="NADYTOPUP.SITE"
+                  width={68}
+                  height={48}
+                  className="h-full w-auto object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]"
+                  priority
                   unoptimized
                 />
               </div>
               <div className="flex flex-col leading-none">
-                <span className="font-black text-sm sm:text-base tracking-tight bg-gradient-to-r from-pink-400 via-rose-300 to-fuchsia-300 bg-clip-text text-transparent">
-                  𝙉𝘼-𝘿𝙔 𝙏𝙊𝙋𝙐𝙋
+                <span className="font-black text-xs sm:text-base tracking-tight bg-gradient-to-r from-cyan-300 via-sky-200 to-pink-300 bg-clip-text text-transparent">
+                  NADYTOPUP.SITE
                 </span>
-                <span className="text-[8px] text-pink-300/70 font-semibold hidden min-[400px]:block">
-                  TOP-UP STORE
+                <span className="text-[7.5px] sm:text-[8.5px] font-extrabold text-cyan-400/90 tracking-wider flex items-center gap-1 mt-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  <span>TOPUP STORE</span>
                 </span>
               </div>
             </Link>
 
-            {/* Complete Desktop Navigation Bar matching the exact design */}
-            <nav className="hidden lg:flex items-center space-x-2 xl:space-x-3 text-xs font-bold">
-              {/* Home */}
-              <Link
-                href="/"
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white font-bold transition-colors"
-              >
-                ទំព័រដើម
-              </Link>
-
-              {/* Games Pill (White pill with black text) */}
-              <Link
-                href="/#catalog"
-                className="px-3.5 py-1 rounded-full bg-white hover:bg-slate-200 text-slate-950 font-black transition-all shadow-sm active:scale-95"
-              >
-                ហ្គេម
-              </Link>
-
-              {/* Track Orders */}
-              <Link
-                href="/history"
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white font-bold transition-colors"
-              >
-                តាមដាន
-              </Link>
-
-              {/* FAQ */}
-              <button
-                type="button"
-                onClick={() => setFaqModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-white font-bold transition-colors cursor-pointer"
-              >
-                FAQ
-              </button>
-
-              {/* Contact & Support */}
-              <Link
-                href="/contact"
-                className="px-2.5 py-1.5 rounded-lg text-slate-200 hover:text-pink-400 font-bold transition-colors"
-              >
-                ទាក់ទង
-              </Link>
-
-              {/* Telegram Updates Sky Blue Pill */}
-              <button
-                type="button"
-                onClick={() => setUpdatesModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-black flex items-center space-x-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Send className="h-3.5 w-3.5 fill-current -rotate-12" />
-                <span>Updates</span>
-              </button>
-
-              {/* Theme Sun Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setHighContrast(!highContrast)}
-                title="Brightness / Contrast Mode"
-                className={`h-8 w-8 rounded-full border transition-colors flex items-center justify-center cursor-pointer ${
-                  highContrast
-                    ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50'
-                    : 'bg-slate-900/90 hover:bg-slate-800 text-amber-400 border-slate-700/60'
-                }`}
-              >
-                <Sun className="h-4 w-4" />
-              </button>
-
-              {/* ✨ Smart Search Button */}
-              <button
-                type="button"
-                onClick={() => setSearchModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-white font-bold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-orange-400 fill-orange-400" />
-                <span>Smart</span>
-                <Search className="h-3.5 w-3.5 text-slate-400 ml-0.5" />
-              </button>
-
-              {/* 🔍 Check ID Button */}
-              <button
-                type="button"
-                onClick={() => setCheckIdModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-full bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 hover:text-white font-bold flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer text-xs"
-              >
-                <Search className="h-3.5 w-3.5 text-cyan-400" />
-                <span>ពិនិត្យ ID</span>
-              </button>
-
-              {/* Quick Track Button */}
-              <Link
-                href="/history"
-                className="px-3.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-slate-200 hover:text-white font-bold transition-colors text-xs"
-              >
-                តាមដាន
-              </Link>
-
-              {/* ⚡ TOP UP White Pill Button */}
-              <Link
-                href="/#catalog"
-                className="px-4 py-1.5 rounded-full bg-white hover:bg-slate-200 text-slate-950 font-black flex items-center space-x-1 shadow-md transition-all active:scale-95 text-xs"
-              >
-                <Zap className="h-3.5 w-3.5 fill-current text-slate-950" />
-                <span>TOP UP</span>
-              </Link>
-
-              {/* Admin Button (if logged in as admin) */}
-              {mounted && isAdmin && (
+            {/* Desktop Navigation Links (Admin shortcut only) */}
+            {mounted && isAdmin && (
+              <nav className="hidden xl:flex items-center space-x-2 text-xs font-bold mr-2">
                 <Link
                   href="/admin"
-                  className="px-3.5 py-1.5 rounded-full bg-violet-950/80 border border-violet-500/40 text-violet-400 hover:bg-violet-900/60 transition-all font-bold flex items-center space-x-1 text-xs"
+                  className="px-3 py-1.5 rounded-full bg-violet-950/80 border border-violet-500/40 text-violet-400 hover:bg-violet-900/60 transition-all font-bold flex items-center space-x-1 text-xs"
                 >
                   <LayoutDashboard className="h-3.5 w-3.5" />
                   <span>Admin</span>
                 </Link>
-              )}
-            </nav>
+              </nav>
+            )}
 
-            {/* Right Quick Section for Mobile / Tablet */}
-            <div className="flex items-center space-x-1.5 lg:hidden">
-              {/* Check ID on mobile */}
+            {/* Header Right Actions (Language Switcher & Menu) */}
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto z-10">
+
+              {/* Language Switcher Pill (KH / EN) */}
               <button
                 type="button"
-                onClick={() => setCheckIdModalOpen(true)}
-                className="p-2 rounded-xl bg-cyan-950/60 text-cyan-300 hover:text-white border border-cyan-500/40 flex items-center gap-1"
-                aria-label="Check ID"
-                title="Check ID Mobile Legends & Free Fire"
+                onClick={() => setLanguage(language === 'KH' ? 'EN' : 'KH')}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/60 text-xs font-black text-slate-200 hover:text-white transition-all shadow-sm active:scale-95 cursor-pointer"
+                title={language === 'KH' ? 'Switch to English' : 'ប្តូរទៅភាសាខ្មែរ'}
+                aria-label="Toggle Language"
               >
-                <Search className="h-4 w-4 text-cyan-400" />
-                <span className="text-[11px] font-bold hidden sm:inline">ពិនិត្យ ID</span>
+                <span className="text-sm">{language === 'KH' ? '🇰🇭' : '🇬🇧'}</span>
+                <span className="text-[11px] tracking-wide font-black uppercase text-cyan-400">
+                  {language === 'KH' ? 'ខ្មែរ' : 'EN'}
+                </span>
               </button>
 
-              {/* Smart Search on mobile */}
-              <button
-                type="button"
-                onClick={() => setSearchModalOpen(true)}
-                className="p-2 rounded-xl bg-slate-900 text-slate-300 hover:text-white border border-slate-800"
-                aria-label="Search"
-              >
-                <Search className="h-4 w-4" />
-              </button>
-
-              {/* ⚡ TOP UP Button on Mobile */}
-              <Link
-                href="/#catalog"
-                className="px-2.5 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs flex items-center space-x-1 shadow-sm"
-              >
-                <Zap className="h-3 w-3 fill-current" />
-                <span>TOP UP</span>
-              </Link>
-
-              {/* Mobile Hamburger Menu Button */}
+              {/* System Menu Button (Hamburger ☰) */}
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-900 text-slate-200 hover:bg-slate-800 border border-slate-800 focus:outline-none"
-                aria-label="Menu"
+                className="btn-sys-dark-control"
+                aria-label="System Menu"
+                title="System Menu"
               >
-                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {mobileMenuOpen ? <X className="w-4.5 h-4.5 stroke-[2.5]" /> : <Menu className="w-4.5 h-4.5 stroke-[2.5]" />}
               </button>
             </div>
 
@@ -575,9 +460,9 @@ export default function Header() {
         </div>
       )}
 
-      {/* ══ MOBILE SLIDE-OVER DRAWER MENU ════════════════════════════════ */}
+      {/* ══ SYSTEM SLIDE-OVER DRAWER MENU (All Devices) ════════════════════════ */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex justify-end">
+        <div className="fixed inset-0 z-50 flex justify-end">
           {/* Backdrop overlay */}
           <div 
             className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
@@ -585,36 +470,42 @@ export default function Header() {
           />
 
           {/* Drawer Panel */}
-          <div className="relative w-full max-w-[300px] h-full bg-slate-950 border-l border-slate-800 shadow-2xl z-10 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300 text-slate-200">
+          <div className="relative w-full max-w-[320px] h-full bg-slate-950 border-l border-slate-800 shadow-2xl z-10 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300 text-slate-200">
             {/* Drawer Header */}
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
-              <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-cyan-500/50 shadow-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-13 rounded-xl overflow-hidden ring-2 ring-cyan-500/50 shadow-xs bg-slate-950/90 p-0.5">
                   <Image
-                    src="/images/nady-avatar.png"
-                    alt="NA-DY TOPUP"
-                    width={32}
-                    height={32}
-                    className="h-full w-full object-cover"
+                    src="/images/nady-logo.png"
+                    alt="NADYTOPUP.SITE"
+                    width={52}
+                    height={36}
+                    className="h-full w-full object-contain"
                     unoptimized
                   />
                 </div>
-                <div className="font-black text-sm text-white">
-                  MENU
+                <div>
+                  <div className="font-black text-sm text-cyan-300 leading-tight">
+                    NADYTOPUP.SITE
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400">
+                    System Menu & Services
+                  </div>
                 </div>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="h-9 w-9 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                 aria-label="Close menu"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* User Profile Card / Status */}
-            <div className="p-4 border-b border-slate-800">
-              {mounted && isLoggedIn ? (
+
+            {/* User Profile Card / Status (Only when logged in) */}
+            {mounted && isLoggedIn && (
+              <div className="p-4 border-b border-slate-800">
                 <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-2xl">
                   <div className="flex items-center space-x-2.5">
                     <div className="h-9 w-9 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-sm border border-cyan-500/30">
@@ -630,28 +521,66 @@ export default function Header() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="p-3 bg-gradient-to-br from-cyan-950/50 to-violet-950/50 border border-cyan-500/30 rounded-2xl">
-                  <div className="text-xs font-bold text-white mb-1">
-                    Welcome to NA-DY TOPUP
-                  </div>
-                  <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
-                    Sign in to easily track your recharge invoices and digital codes.
-                  </p>
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full flex items-center justify-center space-x-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-white text-xs font-black shadow-sm glow-btn"
-                  >
-                    <span>{t.login} / Register</span>
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Navigation List */}
             <div className="flex-1 p-3 space-y-1">
+              {/* Language Switcher inside Drawer */}
+              <div className="p-3 rounded-xl border border-cyan-500/25 bg-cyan-500/10 mb-2">
+                <div className="text-[10px] uppercase font-black text-cyan-300 mb-2 flex items-center justify-between">
+                  <span>{language === 'KH' ? 'ជ្រើសរើសភាសា (Language)' : 'Select Language'}</span>
+                  <span className="text-white font-extrabold">{language === 'KH' ? '🇰🇭 ខ្មែរ (KH)' : '🇬🇧 English (EN)'}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLanguage('KH')}
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      language === 'KH'
+                        ? 'bg-gradient-to-r from-cyan-400 to-cyan-500 text-slate-950 shadow-md'
+                        : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                    }`}
+                  >
+                    <span className="text-sm">🇰🇭</span>
+                    <span>ខ្មែរ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage('EN')}
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                      language === 'EN'
+                        ? 'bg-gradient-to-r from-cyan-400 to-cyan-500 text-slate-950 shadow-md'
+                        : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                    }`}
+                  >
+                    <span className="text-sm">🇬🇧</span>
+                    <span>English</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Light / Night Mode Switcher inside Drawer */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between p-3 rounded-xl text-xs font-bold transition-all text-left cursor-pointer border border-pink-500/25 bg-pink-500/10 hover:bg-pink-500/20 text-slate-100 mb-2"
+              >
+                <div className="flex items-center space-x-3">
+                  {isNight ? (
+                    <Sun className="h-4 w-4 text-amber-400 fill-amber-400/20" />
+                  ) : (
+                    <Moon className="h-4 w-4 text-pink-400 fill-pink-400" />
+                  )}
+                  <span>{isNight ? (language === 'KH' ? 'ប្ដូរទៅពន្លឺ (Light Mode)' : 'Switch to Light Mode') : (language === 'KH' ? 'ប្ដូរទៅរាត្រី (Night Mode)' : 'Switch to Night Mode')}</span>
+                </div>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  isNight ? 'bg-amber-400 text-slate-950' : 'bg-pink-600 text-white'
+                }`}>
+                  {isNight ? 'NIGHT' : 'LIGHT'}
+                </span>
+              </button>
+
               <Link
                 href="/"
                 onClick={() => setMobileMenuOpen(false)}
@@ -680,18 +609,6 @@ export default function Header() {
                 <ChevronRight className="h-4 w-4 text-slate-600" />
               </Link>
 
-              <Link
-                href="/history"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-between p-3 rounded-xl text-xs font-bold text-slate-300 hover:bg-slate-900 transition-all"
-              >
-                <div className="flex items-center space-x-3">
-                  <span className="text-cyan-400 font-black">📋</span>
-                  <span>តាមដានការកុម្ម៉ង់ (Track Order)</span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-600" />
-              </Link>
-
               <button
                 type="button"
                 onClick={() => {
@@ -702,10 +619,10 @@ export default function Header() {
               >
                 <div className="flex items-center space-x-3">
                   <span className="text-amber-400 font-black">🔍</span>
-                  <span>ពិនិត្យ ID ហ្គេម (MLBB & Free Fire)</span>
+                  <span>{language === 'KH' ? 'ពិនិត្យ ID ហ្គេម (MLBB & Free Fire)' : 'Check Game ID (Live Check)'}</span>
                 </div>
                 <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-xs">
-                  ឥតគិតថ្លៃ
+                  {language === 'KH' ? 'ឥតគិតថ្លៃ' : 'FREE'}
                 </span>
               </button>
 
@@ -719,7 +636,7 @@ export default function Header() {
               >
                 <div className="flex items-center space-x-3">
                   <HelpCircle className="h-4 w-4 text-sky-400" />
-                  <span>FAQ (សំណួរញឹកញាប់)</span>
+                  <span>{t.faq}</span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-600" />
               </button>
@@ -731,7 +648,7 @@ export default function Header() {
               >
                 <div className="flex items-center space-x-3">
                   <MessageSquare className="h-4 w-4 text-pink-400" />
-                  <span>ទាក់ទងមកយើង (Contact & Support)</span>
+                  <span>{t.contact}</span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-slate-600" />
               </Link>

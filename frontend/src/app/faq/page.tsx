@@ -60,7 +60,7 @@ export default function FAQPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white">
+    <div className="min-h-screen bg-transparent text-slate-100 flex flex-col font-sans selection:bg-pink-500 selection:text-white">
       <Header />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 space-y-10">

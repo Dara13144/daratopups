@@ -1,12 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --background: #180718; /* Deep Rich Velvet Pink */
-  --foreground: #fdf2f8; /* Soft White Pink */
+  --background: #FF8DA1; /* Pure Solid Pink #FF8DA1 */
+  --foreground: #1e293b; /* Crisp dark text */
   --primary: #f43f5e;    /* Rose Pink */
   --accent: #ec4899;     /* Neon Pink */
-  --card-bg: rgba(38, 12, 34, 0.85);
+  --card-bg: rgba(255, 255, 255, 0.98);
+  --border-color: rgba(255, 255, 255, 0.4);
+  --muted-text: #475569;
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --card-title: #0f172a;
+}
+
+html.night-theme,
+html.dark {
+  --background: #140516; /* Night Mode Deep Velvet */
+  --foreground: #fdf2f8;
+  --primary: #ec4899;
+  --accent: #f43f5e;
+  --card-bg: rgba(26, 8, 28, 0.92);
   --border-color: rgba(244, 114, 182, 0.25);
+  --muted-text: #f9a8d4;
+  --input-bg: #120314;
+  --card-title: #ffffff;
+  color-scheme: dark;
+  background-color: #140516 !important;
+  background: #140516 !important;
 }
 
 html {
@@ -14,25 +33,97 @@ html {
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
   max-width: 100vw;
-  background-color: #180718;
-  color-scheme: dark;
+  background-color: #FF8DA1 !important;
+  background: #FF8DA1 !important;
+  transition: background-color 0.3s ease;
 }
 
 body {
-  background-color: #180718;
+  background-color: #FF8DA1 !important;
+  background: #FF8DA1 !important;
+  background-image: none !important;
   color: var(--foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  max-width: 100vw;
+  touch-action: manipulation;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.night-theme body,
+html.dark body {
+  background-color: #140516 !important;
+  color: #fdf2f8 !important;
   background-image: 
     radial-gradient(at 0% 0%, rgba(244, 63, 94, 0.22) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.22) 0px, transparent 50%),
     radial-gradient(at 50% 15%, rgba(219, 39, 119, 0.16) 0px, transparent 75%),
     radial-gradient(at 20% 60%, rgba(251, 113, 133, 0.12) 0px, transparent 60%),
-    radial-gradient(at 80% 80%, rgba(244, 114, 182, 0.14) 0px, transparent 65%);
-  background-attachment: fixed;
-  min-height: 100vh;
-  overflow-x: hidden;
-  max-width: 100vw;
-  touch-action: manipulation;
+    radial-gradient(at 80% 80%, rgba(244, 114, 182, 0.14) 0px, transparent 65%) !important;
+}
+
+/* Dynamic theme classes */
+.theme-container-card {
+  background-color: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--foreground) !important;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.theme-card-title {
+  color: var(--card-title) !important;
+}
+
+.theme-input {
+  background-color: var(--input-bg) !important;
+  border-color: var(--border-color) !important;
+  color: var(--foreground) !important;
+}
+
+.theme-label {
+  color: var(--muted-text) !important;
+}
+
+html.night-theme .theme-pkg-card-unselected,
+html.dark .theme-pkg-card-unselected {
+  background-color: #1b071e !important;
+  border-color: rgba(244, 114, 182, 0.28) !important;
+}
+
+html.night-theme .theme-pkg-card-unselected:hover,
+html.dark .theme-pkg-card-unselected:hover {
+  background-color: #270c2a !important;
+  border-color: rgba(244, 114, 182, 0.55) !important;
+}
+
+html.night-theme .theme-pkg-name,
+html.dark .theme-pkg-name {
+  color: #ffffff !important;
+}
+
+html.night-theme .theme-pkg-price,
+html.dark .theme-pkg-price {
+  color: #f472b6 !important;
+}
+
+html.night-theme .theme-payment-card,
+html.dark .theme-payment-card {
+  background-color: #1a081c !important;
+  border-color: #00c988 !important;
+}
+
+html.night-theme .theme-agreement-box,
+html.dark .theme-agreement-box {
+  background-color: rgba(26, 8, 28, 0.92) !important;
+  border-color: rgba(244, 114, 182, 0.25) !important;
+  color: #fdf2f8 !important;
+}
+
+html.night-theme .theme-bottom-box,
+html.dark .theme-bottom-box {
+  background-color: rgba(26, 8, 28, 0.95) !important;
+  border-color: rgba(244, 114, 182, 0.25) !important;
 }
 
 /* Prevent iOS input auto-zoom by ensuring font-size is at least 16px on mobile inputs */
@@ -183,17 +274,570 @@ body {
   scrollbar-width: none;
 }
 
-/* ══ ABA KHQR SYSTEM ANIMATIONS ════════════════════════════════════════════ */
+/* ── Authentic KHQR Ticket Styles ──────────────────────────────────────── */
+.khqr-header-cut {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
 
-@keyframes abaPulseGlow {
-  0%, 100% {
-    box-shadow: 0 10px 30px -5px rgba(229, 24, 33, 0.25), 0 0 20px rgba(0, 201, 136, 0.15);
+/* ══ ABA PAYWAY CHECKOUT MODAL SYSTEM (from checkout.payway.com.kh source) ══ */
+
+/* ── Modal Backdrop: exact PayWay fade-in (0→1 over 0.5s) ────────────── */
+@keyframes modalAbaCheckout {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.aba-payway-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 27, 55, 0.87); /* exact PayWay: #081b3787 */
+  z-index: 99999;
+  animation: modalAbaCheckout 0.5s ease both;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+/* ── Desktop modal card (PayWay: width 391px, border-radius 12px) ─────── */
+@keyframes abaPaywayCardIn {
+  0%   { opacity: 0; transform: translateY(24px) scale(0.97); }
+  60%  { opacity: 1; transform: translateY(-3px) scale(1.005); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.aba-payway-card {
+  position: relative;
+  width: 391px;
+  max-width: calc(100vw - 24px);
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  animation: abaPaywayCardIn 0.45s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+  box-shadow: 0 25px 60px -12px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+/* ── Mobile Bottom Sheet (PayWay: border-top-radius 23px, slides up) ─── */
+@keyframes abaPaywaySheetUp {
+  0%   { transform: translateY(100%); border-radius: 23px 23px 0 0; }
+  100% { transform: translateY(0);    border-radius: 23px 23px 0 0; }
+}
+
+.aba-payway-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-radius: 23px 23px 0 0;
+  animation: abaPaywaySheetUp 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+  max-height: 85vh;
+  overflow-y: auto;
+  z-index: 100000;
+}
+
+/* ── Drag Handle (PayWay bottom sheet draggable thumb) ────────────────── */
+.aba-payway-drag-thumb {
+  width: 44px;
+  height: 4px;
+  background: #dcdcdc;
+  border-radius: 2px;
+  margin: 12px auto 0;
+}
+
+/* ── PayWay Logo Float (white SVG, top-right, z-index: 100) ──────────── */
+@keyframes abaPaywayLogoFloat {
+  0%   { opacity: 0; transform: translateY(-8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.aba-payway-logo {
+  position: absolute;
+  top: -36px;
+  right: 0;
+  width: 118px;
+  z-index: 100;
+  animation: abaPaywayLogoFloat 0.4s ease 0.2s both;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── PayWay Spinner (spin 1s linear infinite) ─────────────────────────── */
+@keyframes abaPaywaySpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.aba-payway-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3.5px solid rgba(218, 219, 223, 1);
+  border-top-color: rgba(58, 166, 165, 1); /* exact PayWay teal */
+  border-radius: 50%;
+  animation: abaPaywaySpin 1s linear infinite;
+}
+
+/* ── Loading overlay inside card ──────────────────────────────────────── */
+.aba-payway-loading {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+/* ── PayWay Content Reveal (iframe content fades in) ─────────────────── */
+@keyframes abaPaywayContentReveal {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.aba-payway-content-reveal {
+  animation: abaPaywayContentReveal 0.35s ease 0.1s both;
+}
+
+/* ── PayWay Close Button pulse hint ──────────────────────────────────── */
+@keyframes abaPaywayCloseHint {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229,24,33,0); }
+  50%       { transform: scale(1.08); box-shadow: 0 0 0 4px rgba(229,24,33,0.15); }
+}
+
+.aba-payway-close {
+  animation: abaPaywayCloseHint 3s ease-in-out 2s infinite;
+}
+
+/* ── PayWay Option Item hover lift ───────────────────────────────────── */
+.aba-payway-option {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.aba-payway-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(5, 94, 124, 0.18);
+}
+.aba-payway-option:active {
+  transform: scale(0.98);
+}
+
+/* ── PayWay "Proceed to Pay" button pulse ────────────────────────────── */
+@keyframes abaPaywayBtnPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5,94,124,0.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(5,94,124,0); }
+}
+
+.aba-payway-btn {
+  background: #055E7C;
+  color: #ffffff;
+  transition: background 0.2s ease, transform 0.15s ease;
+  animation: abaPaywayBtnPulse 2.5s ease-in-out infinite;
+}
+.aba-payway-btn:hover {
+  background: rgba(5, 94, 124, 0.83);
+  transform: translateY(-1px);
+}
+.aba-payway-btn:active {
+  transform: scale(0.98);
+}
+
+/* ── ABA Mobile app open hint bounce (tap to open) ───────────────────── */
+@keyframes abaOpenHint {
+  0%, 100% { transform: translateY(0); }
+  40%       { transform: translateY(-5px); }
+  70%       { transform: translateY(-2px); }
+}
+
+.aba-open-hint {
+  animation: abaOpenHint 2.8s ease-in-out infinite;
+}
+
+/* ── Payway teal progress bar (loading indicator below header) ───────── */
+@keyframes abaPaywayProgress {
+  0%   { width: 0%; }
+  60%  { width: 75%; }
+  85%  { width: 88%; }
+  100% { width: 100%; }
+}
+
+.aba-payway-progress {
+  height: 3px;
+  background: linear-gradient(90deg, #3aa6a5, #055E7C);
+  border-radius: 0 2px 2px 0;
+  animation: abaPaywayProgress 2.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ── ABA PayWay KHQR Scanner Laser Line Animation ───────────────────── */
+@keyframes abaQrScannerLaser {
+  0% {
+    top: 4%;
+    opacity: 0.15;
+  }
+  15% {
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 15px 40px -5px rgba(229, 24, 33, 0.45), 0 0 35px rgba(0, 201, 136, 0.3);
+    top: 92%;
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: 4%;
+    opacity: 0.15;
   }
 }
 
-.animate-aba-card-glow {
-  animation: abaPulseGlow 3s ease-in-out infinite;
+.aba-qr-scanner-line {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  height: 2.5px;
+  background: linear-gradient(90deg, rgba(214, 28, 36, 0) 0%, rgba(214, 28, 36, 0.9) 25%, #ff4d5a 50%, rgba(214, 28, 36, 0.9) 75%, rgba(214, 28, 36, 0) 100%);
+  box-shadow: 0 0 14px 2px rgba(214, 28, 36, 0.65), 0 0 5px rgba(255, 255, 255, 0.9);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 20;
+  animation: abaQrScannerLaser 2.8s ease-in-out infinite;
 }
+
+.aba-qr-scanner-glow {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  height: 22px;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, rgba(214, 28, 36, 0.22) 0%, rgba(214, 28, 36, 0) 100%);
+  pointer-events: none;
+  z-index: 19;
+}
+
+/* ── ABA PayWay Corner Target Brackets ──────────────────────────────── */
+@keyframes cornerTargetPulse {
+  0%, 100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.aba-corner-bracket {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  z-index: 25;
+  animation: cornerTargetPulse 2.5s ease-in-out infinite;
+}
+.aba-corner-tl { top: -2px; left: -2px; border-top: 3.5px solid #D61C24; border-left: 3.5px solid #D61C24; border-top-left-radius: 7px; }
+.aba-corner-tr { top: -2px; right: -2px; border-top: 3.5px solid #D61C24; border-right: 3.5px solid #D61C24; border-top-right-radius: 7px; }
+.aba-corner-bl { bottom: -2px; left: -2px; border-bottom: 3.5px solid #D61C24; border-left: 3.5px solid #D61C24; border-bottom-left-radius: 7px; }
+.aba-corner-br { bottom: -2px; right: -2px; border-bottom: 3.5px solid #D61C24; border-right: 3.5px solid #D61C24; border-bottom-right-radius: 7px; }
+
+/* ── Live ABA Radar Status Pulse ────────────────────────────────────── */
+@keyframes abaRadarPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.aba-radar-dot {
+  animation: abaRadarPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ── ABA Header Light Shimmer ────────────────────────────────────────── */
+@keyframes abaHeaderShimmer {
+  0% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+.aba-header-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  pointer-events: none;
+  animation: abaHeaderShimmer 4s ease-in-out infinite;
+}
+
+/* ── ABA PayWay Payment Success Animated SVG Checkmark ───────────────── */
+@keyframes checkmarkStroke {
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes checkmarkScale {
+  0%, 100% {
+    transform: none;
+  }
+  50% {
+    transform: scale3d(1.12, 1.12, 1);
+  }
+}
+@keyframes successRipple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.65);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.aba-success-circle {
+  animation: successRipple 2.2s infinite, checkmarkScale 0.4s ease-in-out 0.8s both;
+}
+
+.aba-checkmark-path {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: checkmarkStroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) 0.35s forwards;
+}
+
+.aba-checkmark-circle {
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  animation: checkmarkStroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+/* ── ABA KHQR Modal Down-to-Up Entrance Animation (PayWay Style) ──────── */
+@keyframes abaBackdropFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes abaModalSlideUp {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 110px, 0) scale(0.92);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes abaModalSlideUpMobile {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 140px, 0) scale(0.92);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.aba-modal-backdrop {
+  animation: abaBackdropFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity;
+}
+
+.aba-modal-slide-up {
+  animation: abaModalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+@media (max-width: 640px) {
+  .aba-modal-slide-up {
+    animation: abaModalSlideUpMobile 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* ── Accessibility ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .aba-payway-overlay,
+  .aba-payway-card,
+  .aba-payway-sheet,
+  .aba-payway-logo,
+  .aba-payway-spinner,
+  .aba-payway-close,
+  .aba-payway-btn,
+  .aba-open-hint,
+  .aba-payway-progress,
+  .aba-payway-content-reveal {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ── System Toolbar Controls (Guaranteed Pixel-Perfect across all devices) ── */
+.btn-sys-cyan-search {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 12px !important;
+  background-color: #1e3c4d !important;
+  border: 1px solid rgba(0, 229, 255, 0.5) !important;
+  color: #00e5ff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.15s ease, background-color 0.2s ease !important;
+}
+
+.btn-sys-cyan-search:hover {
+  background-color: #264b60 !important;
+}
+
+.btn-sys-cyan-search:active {
+  transform: scale(0.94) !important;
+}
+
+.btn-sys-dark-control {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 12px !important;
+  background-color: #0d1424 !important;
+  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+  color: #e2e8f0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.15s ease, background-color 0.2s ease !important;
+}
+
+.btn-sys-dark-control:hover {
+  background-color: #16213a !important;
+}
+
+.btn-sys-dark-control:active {
+  transform: scale(0.94) !important;
+}
+
+.btn-sys-topup-pill {
+  height: 36px !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+  border-radius: 9999px !important;
+  background-color: #ffffff !important;
+  color: #020617 !important;
+  font-weight: 900 !important;
+  font-size: 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18) !important;
+  transition: transform 0.15s ease, background-color 0.2s ease !important;
+}
+
+.btn-sys-topup-pill:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.btn-sys-topup-pill:active {
+  transform: scale(0.94) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HIGH-PERFORMANCE ADMIN DASHBOARD ANIMATIONS (PHONE & PC)
+   ══════════════════════════════════════════════════════════════════════════ */
+@keyframes adminFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-admin-tab {
+  animation: adminFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes adminGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(236, 72, 153, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(236, 72, 153, 0.35);
+  }
+}
+
+.animate-admin-glow {
+  animation: adminGlowPulse 3s ease-in-out infinite;
+}
+
+@keyframes floatBadge {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.animate-badge-float {
+  animation: floatBadge 2.5s ease-in-out infinite;
+}
+
+.admin-glass-card {
+  background: rgba(22, 7, 25, 0.82) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  border: 1px solid rgba(236, 72, 153, 0.2) !important;
+}
+
+.admin-glass-card:hover {
+  border-color: rgba(236, 72, 153, 0.45) !important;
+}
+
+.mobile-touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(236, 72, 153, 0.3) transparent;
+}
+
+.mobile-touch-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.mobile-touch-scroll::-webkit-scrollbar-thumb {
+  background: rgba(236, 72, 153, 0.4);
+  border-radius: 4px;
+}
+
